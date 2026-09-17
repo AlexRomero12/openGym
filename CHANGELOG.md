@@ -1,5 +1,41 @@
 # Changelog
 
+## Fork local — rama `amigos-es` (2026-09-17)
+
+Trabajo propio de este fork sobre v1.3.7. Nada de esto va al repo original salvo lo que se
+indica aparte (la traducción se propone en el **PR #245**).
+
+- 🇪🇸 **Nombres de ejercicios en español (completo: 1.324).** Pack `frontend/src/exercise-names/es.js`
+  generado desde `scripts/exercise-name-sources/es.json` con `scripts/build-es-exercise-names.mjs`;
+  se muestra «español (english)» y la búsqueda es bilingüe. Verificado con 12 reglas de calificadores
+  (0 fallos) y test propio. *Propuesto también al repo original: PR #245.*
+- 🏆 **Amigos — ranking entre perfiles de la instancia.** Pestaña propia en la misma PWA
+  (`frontend/src/views/Friends.jsx`) + `GET /api/friends` (`api/friends.js`), config en
+  `data/friends.json`. Métricas: volumen (sin warm-ups), cumplimiento, racha y e1RM Epley por
+  ejercicio; opt-in por perfil con el switch «Aparecer en el ranking» (`friends.share` en el
+  estado) con reglas de consentimiento; «últ. entreno» por fila; gestión de perfiles desde la UI
+  (solo el dueño) vía `POST /api/friends/add|remove`.
+- 🎮 **Rediseño gamificado del ranking.** Podio con medallas y **colores de identidad** por
+  persona, barras proporcionales al líder, tendencia ▲▼ vs la semana anterior y «Progreso» por
+  ejercicio (un LineChart por persona); **mapa de territorios** interactivo
+  (`components/TerritoryMap.jsx`) con el dueño de cada músculo decidido entre los ejercicios que
+  lo trabajan **directo** (fallback marcado «sin trabajo directo»); **premios semanales**
+  (👑 🧱 🎯 🔥 ⚔️ + campeón anterior) y temporada (semana ISO). El api agrega `color`, `trend` y
+  `series` semanales por entrada, más el tope `maxExercises` (Top N: más gente → más veces
+  entrenado → más pesado).
+- 📣 **Social V1 — Actividad + Rutinas** (`api/social.js`, `data/social.json`). Feed de sesiones
+  terminadas como snapshot (rutina, minutos, volumen, series, **destacados en kg**, PRs),
+  reacciones **🔥👏💪**, borrar lo propio y **auto-publicación opt-in** (`social.autoShare`); y
+  **rutinas del grupo**: publicar/actualizar/despublicar (con `rid` de vínculo) y copiar a tu plan
+  con `mergePlan` (ids nuevos, no pisa nada). Mismo consentimiento que el ranking; poda automática
+  (90 días / 100 posts / 30 rutinas).
+- 🧩 **Ajustes finos.** «Por ejercicio» estricto (solo compartidos; con un solo perfil queda
+  vacío); aviso del mapa de territorios cuando no hay 2+ personas; tabla de historial con scroll
+  horizontal; fila de progresión 2×2 en teléfonos; íconos de rutina (glyph keys como
+  `figureStrength`) renderizados como iconos en Rutinas y en el feed.
+- 📦 **Build.** `api/Dockerfile` copia `friends.js` y `social.js`; la instancia corre con
+  `docker compose up -d --build` (**nunca** `pull`: pisaría la feature local).
+
 ## v1.3.7 — 2026-09-12
 
 The v1.3.6 tag's Android build failed on a double dash inside an XML comment, so the APK for everything in v1.3.6 is this one — plus the iPhone timer-sound fix that landed an hour later. Web bundle, APK and API image; v1.3.6 and v1.3.7 are the same code apart from the two items below.
