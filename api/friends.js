@@ -174,7 +174,7 @@ const DEMO_PLAN = [
   { id: 'demo-r2', name: 'Día B · Pierna', weekday: 3, ex: [{ id: '0043', sets: 4, reps: 5, weight: 72.5, inc: 2.5 }, { id: '0025', sets: 3, reps: 8, weight: 52.5, inc: 1.25 }] },
   { id: 'demo-r3', name: 'Día C · Torso', weekday: 5, ex: [{ id: '0032', sets: 3, reps: 5, weight: 95, inc: 5 }, { id: '0043', sets: 3, reps: 8, weight: 62.5, inc: 2.5 }] },
 ]
-function demoState(now = new Date(), { weeks = 4 } = {}) {
+function demoState(now = new Date(), { weeks = 4, scale = 1 } = {}) {
   const today = isoOf(now)
   const week0 = startOfWeek(today, 1)
   const round = n => Math.round(n * 2) / 2
@@ -187,7 +187,7 @@ function demoState(now = new Date(), { weeks = 4 } = {}) {
       workouts.push({
         id: `demo-${wk}-${r.id}`, d, start: ts(d), end: ts(d) + 62 * 60000, routineId: r.id, name: r.name,
         entries: r.ex.map(cfg => {
-          const w = round(cfg.weight + (3 - wk) * cfg.inc)
+          const w = round((cfg.weight + (3 - wk) * cfg.inc) * scale)
           const sets = [{ w: round(w * 0.5), r: cfg.reps, done: true, phase: 'warmup' }]
           for (let i = 0; i < cfg.sets; i++) sets.push({ w, r: cfg.reps, done: true })
           return { id: cfg.id, sets, topW: w }
@@ -210,6 +210,11 @@ function demoState(now = new Date(), { weeks = 4 } = {}) {
 }
 
 const METRICS = ['volume', 'compliance', 'streak']
+// Colores de identidad para la vista: mismas claves que ACCENTS del frontend (lib/format.js) —
+// el api no puede importarlas (contexto de build ./api), así que se replican acá. Se puede fijar
+// uno a mano por participante en friends.json (`color`); si no, se asigna estable por uid.
+const PALETTE = ['lime', 'sky', 'violet', 'orange', 'teal', 'pink', 'gold', 'red']
+const isPaletteColor = v => typeof v === 'string' && PALETTE.includes(v)
 const customName = (id, S) => { const c = (S.customEx || []).find(e => e.id === id); return c ? c.n : null }
 
 /** Quién aparece: entradas de friends.json (las maneja el dueño) + opt-in propio desde el
@@ -253,6 +258,22 @@ export function isInstanceOwner(dataDir, uid, adminFlag = false) {
   return !!uid && uid === ownerOf(users, states)
 }
 
+/** Tendencia con los dos últimos valores disponibles (de la semana actual hacia atrás).
+ *  Series cortas o con un solo dato devuelven null (sin flecha). */
+function trendOf(scoresAsc) {
+  let latest = null, before = null
+  for (let i = scoresAsc.length - 1; i >= 0; i--) {
+    const v = scoresAsc[i]
+    if (v == null) continue
+    if (latest == null) latest = v
+    else { before = v; break }
+  }
+  if (latest == null || before == null) return null
+  const diff = latest - before
+  if (Math.abs(diff) <= Math.abs(before) * 0.002) return { dir: 'same', pct: 0 }
+  return { dir: diff > 0 ? 'up' : 'down', pct: round1(diff / before * 100) }
+}
+
 /** Construye todo lo que la vista muestra. `now` inyectable para tests. */
 export function buildRanking({ users, states }, config, now = new Date(), norm = 'rel') {
   const ws = config.weekStart === 0 ? 0 : 1
@@ -281,7 +302,12 @@ export function buildRanking({ users, states }, config, now = new Date(), norm =
     const week = byWeek[0]
     const lastWorkout = S.workouts.reduce((m, w) => (w && w.d && (!m || w.d > m) ? w.d : m), null)
     const all = bestLifts(S)
-    const thisWeek = bestLifts(S, current)
+    // Cuántas veces aparece cada ejercicio en sus entrenos (criterio «los que más hagamos»).
+    const sessions = new Map()
+    for (const w of S.workouts) for (const e of (w.entries || [])) if (e && e.id != null) sessions.set(e.id, (sessions.get(e.id) || 0) + 1)
+    // Mejor 1RM de cada semana (índice 0 = la actual): alimenta tendencias y los mini-gráficos.
+    const weekAll = weeks.map(x => bestLifts(S, x))
+    const thisWeek = weekAll[0]
     const prior = bestLifts(S, { start: '', end: isoAddDays(current.start, -1) })
 
     const volKg = week.volume * toKg
@@ -302,6 +328,7 @@ export function buildRanking({ users, states }, config, now = new Date(), norm =
       uid: p.uid,
       name: p.name || user.name || p.uid,
       emoji: p.emoji || '💪',
+      color: isPaletteColor(p.color) ? p.color : null,
       shares: flags,
       hasBodyweight: bw.length > 0,
       week: {
@@ -313,9 +340,21 @@ export function buildRanking({ users, states }, config, now = new Date(), norm =
       },
       streakWeeks: flags.streak ? streakOf(S, ws) : null,
       lastWorkout,
-      _weekKg: week, _byWeek: byWeek, _volRank: volRank, _all: all, _thisWeek: thisWeek,
+      _weekKg: week, _byWeek: byWeek, _volRank: volRank, _all: all, _thisWeek: thisWeek, _weekAll: weekAll, _sessions: sessions,
       _impr: impr, _toKg: toKg, _bw: bw,
     })
+  }
+
+  // Dos perfiles nunca comparten color: el fijado en friends.json manda y el resto se deriva
+  // del uid (estable entre llamadas) corriendo al siguiente libre ante colisión.
+  const usedColors = new Set(participants.map(x => x.color).filter(Boolean))
+  for (const p of participants) {
+    if (p.color) continue
+    const idx = [...p.uid].reduce((h, x) => (h * 31 + x.charCodeAt(0)) >>> 0, 7) % PALETTE.length
+    let c = PALETTE[idx]
+    for (let i = 1; usedColors.has(c) && i <= PALETTE.length; i++) c = PALETTE[(idx + i) % PALETTE.length]
+    usedColors.add(c)
+    p.color = c
   }
 
   const vr = p => (p._volRank == null ? -1 : p._volRank)
@@ -342,14 +381,30 @@ export function buildRanking({ users, states }, config, now = new Date(), norm =
       if (score == null) continue
       if (!exMap.has(id)) exMap.set(id, [])
       const wk = p._thisWeek.get(id) || null
+      // Serie por semana (vieja → nueva) para el gráfico «Ver progreso»; trend = últimos dos
+      // valores disponibles (la comparación es sobre la misma métrica del ranking).
+      const series = []
+      for (let i = weeks.length - 1; i >= 0; i--) {
+        const b = p._weekAll[i].get(id)
+        const estWkKg = b ? b.est * p._toKg : null
+        const bwWk = b ? bwAt(p._bw, weeks[i].end) : null
+        series.push({
+          w: weeks[i].start,
+          est: estWkKg == null ? null : display(estWkKg),
+          rel: estWkKg != null && bwWk ? round1(estWkKg / bwWk) : null,
+        })
+      }
       exMap.get(id).push({
-        uid: p.uid, _score: score, est: display(estKg), w: display(best.w * p._toKg), r: best.r, d: best.d,
+        uid: p.uid, _score: score, _kg: estKg, est: display(estKg), w: display(best.w * p._toKg), r: best.r, d: best.d,
         rel: bwSet ? round1(estKg / bwSet) : null,
         improved: !!wk && wk.est >= best.est - 1e-9 && wk.d === best.d,
+        series, trend: trendOf(series.map(s => (rel ? s.rel : s.est))),
       })
     }
   }
   const floor = Math.min(Math.max(1, config.minParticipantsPerExercise || 1), Math.max(1, participants.length))
+  // Recorte opcional de «Por ejercicio»: los N más compartidos (0/ausente = la lista completa).
+  const maxExercises = Math.max(0, Math.floor(Number(config.maxExercises) || 0))
   const exercises = [...exMap.entries()]
     .map(([id, list]) => {
       const sorted = list.sort((a, b) => b._score - a._score || a.uid.localeCompare(b.uid))
@@ -357,13 +412,18 @@ export function buildRanking({ users, states }, config, now = new Date(), norm =
         id,
         name: customName(id, normalize(states.get(sorted[0].uid) || {})) || null,
         people: sorted.length,
+        // Criterios del Top N: más gente → más veces entrenado → más pesado (e1RM en kg).
+        sessions: participants.reduce((n, p) => n + (p._sessions.get(id) || 0), 0),
+        _heavy: sorted.reduce((m, e) => Math.max(m, e._kg || 0), 0),
         entries: sorted.map(e => (rel
-          ? { uid: e.uid, rel: e.rel, r: e.r, d: e.d, improved: e.improved }
-          : { uid: e.uid, est: e.est, w: e.w, r: e.r, d: e.d, improved: e.improved })),
+          ? { uid: e.uid, rel: e.rel, r: e.r, d: e.d, improved: e.improved, series: e.series, trend: e.trend }
+          : { uid: e.uid, est: e.est, rel: e.rel, w: e.w, r: e.r, d: e.d, improved: e.improved, series: e.series, trend: e.trend })),
       }
     })
     .filter(ex => ex.entries.length >= floor)
-    .sort((a, b) => b.people - a.people || a.id.localeCompare(b.id))
+    .sort((a, b) => b.people - a.people || b.sessions - a.sessions || b._heavy - a._heavy || a.id.localeCompare(b.id))
+    .slice(0, maxExercises || undefined)
+    .map(({ _heavy, ...ex }) => ex)
 
   const history = weeks.map((w, idx) => {
     const values = {}
@@ -410,7 +470,7 @@ export function buildRanking({ users, states }, config, now = new Date(), norm =
     participantCount: participants.length,
     participants: participants.map(p => ({
       uid: p.uid, name: p.name, emoji: p.emoji, shares: p.shares, hasBodyweight: p.hasBodyweight,
-      week: p.week, streakWeeks: p.streakWeeks, lastWorkout: p.lastWorkout,
+      week: p.week, streakWeeks: p.streakWeeks, lastWorkout: p.lastWorkout, color: p.color,
     })),
     ranking, improvement, exercises, history,
   }

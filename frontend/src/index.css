@@ -39,6 +39,7 @@
   /* system palette (iOS dark values) */
   --blue:#0a84ff; --green:#30d158; --red:#ff453a; --orange:#ff9f0a;
   --yellow:#ffd60a; --teal:#40c8e0; --indigo:#5e5ce6; --pink:#ff375f;
+  --medal-gold:#ffd60a; --medal-silver:#aab4c4; --medal-bronze:#cd8a4d;   /* podio (vista Amigos) */
   --purple:#bf5af2; --mint:#63e6e2; --brown:#ac8e68; --grey:#8e8e93;
 
   /* accent (per-account, synced) */
@@ -79,6 +80,7 @@
   --blue:#007aff; --green:#34c759; --red:#ff3b30; --orange:#ff9500;
   --yellow:#ffcc00; --teal:#30b0c7; --indigo:#5856d6; --pink:#ff2d55;
   --purple:#af52de; --mint:#00c7be; --brown:#a2845e; --grey:#8e8e93;
+  --medal-gold:#d9a406; --medal-silver:#7d8798; --medal-bronze:#a96a33;
   --acc-2:#248a3d;
   --on-acc:#ffffff;
 }
@@ -833,6 +835,13 @@ body.chips-dragging *{cursor:inherit}
 .cfgrow>div{flex:1;min-width:0}
 .cfgrow .stp button{width:30px}
 .cfgrow .stp-l{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* …and a fourth stepper lands here when the deload field joins in (double progression on a
+   barbell lift). Four across a phone squeezed every value to ~20px and ellipsized the labels,
+   so under 520px the row wraps into two even columns: "Reps desde"/"Reps hasta" stay readable. */
+@media (max-width:520px){
+  .cfgrow:has(>div:nth-child(4)){flex-wrap:wrap}
+  .cfgrow:has(>div:nth-child(4))>div{flex:0 1 calc(50% - 4px)}
+}
 
 /* --- rest timer --- */
 #timer{
@@ -1039,6 +1048,37 @@ body.chips-dragging *{cursor:inherit}
 /* A hairline in the surface colour separates neighbouring muscles; the artwork has no
    outline path of its own, so without this the body reads as one flat blob. */
 .bm-v path{stroke:var(--surface);stroke-width:2.5;stroke-linejoin:round}
+
+/* --- Amigos: identidad por color, podio, barras y territorios (feature local) --- */
+.fx-dot{display:inline-block;width:9px;height:9px;border-radius:99px;flex:none;background:var(--label-4);vertical-align:-1px}
+.fx-row{display:flex;align-items:center;gap:10px;padding:7px 0}
+.fx-row.me{background:color-mix(in srgb,var(--acc) 6%,transparent);border-radius:var(--r);margin:0 -6px;padding-left:6px;padding-right:6px}
+.fx-medal{width:22px;height:22px;border-radius:11px;flex:none;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;background:var(--surface-2);color:var(--label-2)}
+.fx-medal.m1{background:color-mix(in srgb,var(--medal-gold) 20%,transparent);color:var(--medal-gold)}
+.fx-medal.m2{background:color-mix(in srgb,var(--medal-silver) 24%,transparent);color:var(--medal-silver)}
+.fx-medal.m3{background:color-mix(in srgb,var(--medal-bronze) 22%,transparent);color:var(--medal-bronze)}
+.fx-main{flex:1;min-width:0}
+.fx-line{display:flex;align-items:baseline;gap:7px;min-width:0}
+.fx-name{font-size:15px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.fx-row.me .fx-name{font-weight:600}
+.fx-val{margin-left:auto;flex:none;font-size:15px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+.fx-tr{margin-left:5px;font-size:11px;font-weight:600}
+.fx-tr.up{color:var(--green)}
+.fx-tr.down{color:var(--red)}
+.fx-tr.same{color:var(--label-3)}
+.fx-bar{height:5px;border-radius:99px;background:var(--surface-2);overflow:hidden;margin-top:5px}
+.fx-bar i{display:block;height:100%;border-radius:99px;transition:width var(--med) var(--ease)}
+.fx-prog{margin-top:6px;padding-top:10px;border-top:var(--hair) solid var(--sep)}
+.fx-prog-h{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--label-2);margin:0 0 2px}
+.fx-prog .chart{margin-bottom:8px}
+.tm-m{fill:var(--bm-base);transition:fill var(--med) var(--ease)}
+.tm .bm-v{max-height:min(38vh,300px)}
+.tm .tm-m.sel{stroke:var(--label);stroke-width:7}
+.tm.tappable .tm-m{cursor:pointer}
+.fx-legend{display:flex;flex-wrap:wrap;gap:4px 12px;justify-content:center;margin-top:8px}
+.fx-legend-i{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--label-2)}
+/* La tabla de semanas se desliza en horizontal en vez de salirse de la tarjeta. */
+.tbl-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:2px}
 
 .mrow{display:flex;align-items:center;gap:9px;padding:5px 0}
 .mrow .nm{flex:1;min-width:0;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
