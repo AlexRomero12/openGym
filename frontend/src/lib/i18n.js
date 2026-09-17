@@ -12,7 +12,7 @@ import {
 
 export {
   LANGS, INSTR_LANGS, EXERCISE_NAME_LANGS, DATE_LOCALES, DERIVED_LOCALES,
-  getLang, dateLocale, t, instrFor, exerciseNameFor, exerciseNameSearchText
+  getLang, dateLocale, t, instrFor, exerciseNameFor, exerciseNameSearchText, sentenceCase
 }
 
 // Vite code-splits locale, instruction and exercise-name packs via import.meta.glob. They are

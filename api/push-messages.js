@@ -15,6 +15,14 @@ const COPY = {
     dayRoutineSuffix: 'hoje',
     dayBody: 'Está no seu plano — vamos treinar 💪',
   },
+  es: {
+    restTitle: 'Descanso terminado 💪',
+    restBody: 'Hora de la próxima serie.',
+    testBody: 'Notificación de prueba ✅ — así se ven los avisos.',
+    dayFallbackTitle: 'Entreno planificado para hoy',
+    dayRoutineSuffix: 'hoy',
+    dayBody: 'Está en tu plan — vamos 💪',
+  },
 };
 
 const copyFor = lang => COPY[lang] || COPY.en;

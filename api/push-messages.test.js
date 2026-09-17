@@ -25,3 +25,21 @@ test('keeps the existing English copy as the fallback', () => {
   assert.equal(dayReminderPush('unknown', null).title, 'Workout planned today');
   assert.equal(testPush(undefined).body, 'Test notification ✅ — this is what alerts look like.');
 });
+
+test('localizes every server-generated notification in es', () => {
+  assert.deepEqual(restTimerPush('es'), {
+    title: 'Descanso terminado 💪',
+    body: 'Hora de la próxima serie.',
+    tag: 'rest-timer',
+  });
+  assert.deepEqual(testPush('es'), {
+    title: 'openGym',
+    body: 'Notificación de prueba ✅ — así se ven los avisos.',
+    tag: 'test',
+  });
+  assert.deepEqual(dayReminderPush('es', { name: 'Día A · Empuje', emoji: '🏋️' }), {
+    title: '🏋️ Día A · Empuje hoy',
+    body: 'Está en tu plan — vamos 💪',
+    tag: 'day-reminder',
+  });
+});

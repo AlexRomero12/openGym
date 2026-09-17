@@ -73,19 +73,26 @@ export function t(s, ...args) {
 // Instructions for an exercise in the current language (English steps as fallback).
 export const instrFor = ex => (instr && instr[ex.id]) || ex.st || []
 
+// Solo la primera letra en mayúscula (estilo oración): «remo en polea sentado» → «Remo en
+// polea sentado». Mayúscula ya puesta no se toca («Burpee» queda «Burpee») y salta símbolos o
+// dígitos iniciales («45° side bend» → «45° Side bend»).
+export const sentenceCase = s => String(s || '').replace(/\p{L}/u, ch => ch.toUpperCase())
+
 // Built-in catalogue names are bilingual when a complete translated name pack is active.
 // User-created exercises have no entry in the pack and keep their exact chosen name.
+// El resultado va en tipo oración (el catálogo viene en minúsculas) y las vistas ya no aplican
+// `text-transform: capitalize` a nombres de ejercicios.
 export const exerciseNameFor = ex => {
   const translated = exerciseNames && ex && exerciseNames[ex.id]
-  if (!translated) return ex?.n || ''
+  if (!translated) return sentenceCase(ex?.n || '')
   // Some names (Burpee, Pilates, brand/model terms) are the established term in the target
   // language too. Repeating an identical loanword in parentheses adds noise rather than
   // context. Compared in the active language's own casing rules, not hardcoded to one —
   // this only ever differs from ordinary casing for languages with locale-specific rules
   // (e.g. Turkish dotless i), which does not include any language shipped here today.
   return translated.toLocaleLowerCase(lang) === ex.n.toLocaleLowerCase('en')
-    ? translated
-    : `${translated} (${ex.n})`
+    ? sentenceCase(translated)
+    : `${sentenceCase(translated)} (${ex.n})`
 }
 
 // Search both the localized and canonical English title without changing persisted data.

@@ -16,9 +16,8 @@ import { mergePlan } from '../lib/plan-share.js'
 import { confirmSheet } from '../sheets.jsx'
 import { useStore } from '../store/useStore.js'
 import { useUI } from '../store/useUI.js'
-import { exerciseNameFor } from '../lib/i18n.js'
+import { exerciseNameFor, sentenceCase } from '../lib/i18n.js'
 
-const cap = s => String(s || '').replace(/(^|[\s(\-/])(\p{Ll})/gu, (m, pre, ch) => pre + ch.toUpperCase())
 const weekLabel = (a, b) => {
   const f = iso => new Date(iso + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })
   return `${f(a)} – ${f(b)}`
@@ -36,7 +35,7 @@ const METRIC_LABELS = { volume: 'Volumen', compliance: 'Cumplimiento', streak: '
 // Nombre del ejercicio con el pack de español (cae al nombre del servidor o al id).
 const exLabel = (id, fallback) => {
   const ex = exOr(id)
-  return cap(ex ? exerciseNameFor(ex) : (fallback || id))
+  return ex ? exerciseNameFor(ex) : sentenceCase(fallback || id)
 }
 
 export default function Friends() {

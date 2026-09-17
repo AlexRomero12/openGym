@@ -33,6 +33,17 @@ indica aparte (la traducción se propone en el **PR #245**).
   vacío); aviso del mapa de territorios cuando no hay 2+ personas; tabla de historial con scroll
   horizontal; fila de progresión 2×2 en teléfonos; íconos de rutina (glyph keys como
   `figureStrength`) renderizados como iconos en Rutinas y en el feed.
+- 🔤 **Nombres de ejercicios en tipo oración** («Remo en polea sentado»): se centralizó en
+  `exerciseNameFor` (`sentenceCase`, solo la primera letra) y se quitó el `text-transform:
+  capitalize` de todas las vistas (Entrenar, Plan, Biblioteca, Stats, historial, PRs, toasts y
+  plan imprimible).
+- 📊 **Stats — mejoras de usabilidad.** El detalle del músculo seleccionado ya no muestra «0
+  series» cuando no hay carga; la lista «Sin entrenar en este periodo» se oculta mientras hay un
+  músculo tocado (se leía como si fuera sobre la selección); **«Progreso por ejercicio» se filtra
+  por el músculo elegido en el mapa**, ordena por **implicación directa → veces hecho → mejor
+  actual** y muestra el contador `· N×`.
+- 🔔 **Notificaciones push en español** (descanso, recordatorio de entreno y test), con el idioma
+  del perfil; test propio en `api/push-messages.test.js` (3/3).
 - 📦 **Build.** `api/Dockerfile` copia `friends.js` y `social.js`; la instancia corre con
   `docker compose up -d --build` (**nunca** `pull`: pisaría la feature local).
 

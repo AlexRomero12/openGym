@@ -97,11 +97,10 @@ function fatigueLabel(value) {
   return t(state === 'ready' ? 'Ready' : state === 'recovering' ? 'Recovering' : 'Fatigued')
 }
 
-function MuscleBalance({ S }) {
+function MuscleBalance({ S, sel, setSel }) {
   const [view, setView] = useState('balance')
   const [win, setWin] = useState(7)
   const [hard, setHard] = useState(false)
-  const [sel, setSel] = useState(null)
   const now = useNow()
   const lang = getLang()
   const workouts = S.workouts
@@ -157,18 +156,22 @@ function MuscleBalance({ S }) {
         <BodyMapLegend />
         {sel && <div className="mrow" style={{ borderTop: 'var(--hair) solid var(--sep)', marginTop: 4, paddingTop: 10 }}>
           <span className="nm"><b>{t(MUSCLE_NAME[sel])}</b></span>
-          <span className="v">{sets(sel) ? t('{0} sets', sets(sel)) : on ? t('no hard sets') : t('not trained')}</span>
+          {/* Numérico, no el string ya formateado: fmtNum(0) es "0" (truthy), así que un músculo
+              sin carga mostraba "0 series" en vez de "sin entrenar". */}
+          <span className="v">{(load[sel] || 0) > 0 ? t('{0} sets', sets(sel)) : on ? t('no hard sets') : t('not trained')}</span>
         </div>}
         {!sel && top.map(m => <div key={m} className="mrow">
           <span className="nm">{t(MUSCLE_NAME[m])}</span>
           <span className="bar"><i style={{ width: Math.round(load[m] / max * 100) + '%', background: on ? 'var(--yellow)' : undefined }} /></span>
           <span className="v">{t('{0} sets', sets(m))}</span>
         </div>)}
-        {missed.length > 0 && <>
+        {/* El resumen del periodo va solo sin selección: con un músculo tocado, la lista de
+            «sin entrenar» quedaba pegada debajo y se leía como si fuera sobre lo seleccionado. */}
+        {!sel && missed.length > 0 && <>
           <h4 className="sec" style={{ marginTop: 12 }}>{on ? t('No hard sets in this period') : t('Not trained in this period')}</h4>
           <div className="mchips">{missed.map(m => <span key={m} className="mchip miss">{t(MUSCLE_NAME[m])}</span>)}</div>
         </>}
-        {!missed.length && worked.length > 0 &&
+        {!sel && !missed.length && worked.length > 0 &&
           <div className="muted small" style={{ marginTop: 10 }}>{on
             ? t('Every muscle group got at least one hard set in this period.')
             : t('Every muscle group got some work in this period.')}</div>}
@@ -288,6 +291,7 @@ export default function Stats() {
   const [range, setRange] = useState(90)
   const [exId, setExId] = useState(null)
   const [exMetric, setExMetric] = useState('top')
+  const [muscle, setMuscle] = useState(null)   // músculo tocado en el mapa: filtra «Progreso por ejercicio»
   const now = Date.now()
   const kind = displayScale(S)
   const hd = scaleName(kind)
@@ -348,9 +352,18 @@ export default function Stats() {
     }
     return { mx: 0, unit: S.unit }
   }
-  const exHist = [...new Set(workouts.flatMap(w => w.entries.map(e => e.id)))].filter(id => EXIDX[id] || nameOf(id) !== id)
+  // Con un músculo seleccionado arriba, «Progreso por ejercicio» se limita a los ejercicios que
+  // lo involucran (principal o secundario, según los pesos de lib/muscles.js).
+  const exHistAll = [...new Set(workouts.flatMap(w => w.entries.map(e => e.id)))].filter(id => EXIDX[id] || nameOf(id) !== id)
+  const exHist = muscle ? exHistAll.filter(id => (musclesOf(EXIDX[id])[muscle] || 0) > 0) : exHistAll
   const exCurrent = Object.fromEntries(exHist.map(id => [id, currentOf(id)]))
-  exHist.sort((a, b) => exCurrent[b].mx - exCurrent[a].mx || nameOf(a).localeCompare(nameOf(b)))
+  // Orden pedido: con un músculo filtrado, primero los ejercicios que lo trabajan DIRECTO
+  // (mismo criterio que el mapa de territorios: peso ≥ 0.5 en musclesOf) y recién después los
+  // indirectos; dentro de cada grupo, más veces hecho, mejor actual y nombre.
+  const exTimes = {}
+  for (const w of workouts) for (const e of w.entries) exTimes[e.id] = (exTimes[e.id] || 0) + 1
+  const directOf = id => (muscle ? (musclesOf(EXIDX[id])[muscle] || 0) >= 0.5 : false)
+  exHist.sort((a, b) => (directOf(b) - directOf(a)) || (exTimes[b] || 0) - (exTimes[a] || 0) || exCurrent[b].mx - exCurrent[a].mx || nameOf(a).localeCompare(nameOf(b)))
   const curEx = exId && exHist.includes(exId) ? exId : exHist[0] || null
   // A completed reps work row is authoritative for strength metrics, even when the parent
   // target also contains timed/cardio work. Entries without reps rows use their selected mode.
@@ -445,7 +458,7 @@ export default function Stats() {
       <Heatmap S={S} onDay={iso => { const ws = workouts.filter(w => w.d === iso); if (ws.length === 1) workoutDetailSheet(ws[0]); else if (ws.length) calendarSheet(iso) }} />
     </div>
 
-    {workouts.length > 0 && <MuscleBalance S={S} />}
+    {workouts.length > 0 && <MuscleBalance S={S} sel={muscle} setSel={setMuscle} />}
     {hasEffort(S) && <EffortCard S={S} />}
 
     <div className="cols">
@@ -464,10 +477,14 @@ export default function Stats() {
 
       <div className="card">
         <h2>{t('Exercise progress')}</h2>
+        {muscle && <div className="row between" style={{ marginBottom: 8 }}>
+          <span className="small dim">Filtrando: <b style={{ color: 'var(--label)' }}>{t(MUSCLE_NAME[muscle])}</b> <span className="dim">· elegido en el mapa</span></span>
+          <Button size="sm" variant="ghost" icon="xmark" onClick={() => setMuscle(null)}>Quitar filtro</Button>
+        </div>}
         {exHist.length ? <>
           <div className="sect-b" style={{ marginBottom: 10 }}>
             <SelectRow title={t('Exercise')} sheetTitle={t('Exercise progress')} value={curEx} onChange={setExId} stackedValue
-              options={exHist.map(id => ({ value: id, label: nameOf(id) + (exCurrent[id].mx ? ' ' + '—' + ' ' + fmtNum(exCurrent[id].mx) + ' ' + exCurrent[id].unit : '') }))}
+              options={exHist.map(id => ({ value: id, label: nameOf(id) + (exCurrent[id].mx ? ' ' + '—' + ' ' + fmtNum(exCurrent[id].mx) + ' ' + exCurrent[id].unit : '') + ' · ' + (exTimes[id] || 0) + '×' }))}
               search={{
                 placeholder: t('Search…'),
                 label: t('Search…'),
@@ -493,7 +510,9 @@ export default function Stats() {
           {!onEff && !onE1 && showEff && <div className="small dim" style={{ marginTop: 4 }}>
             {t('A fuller dot means less left in the tank — the same weight at a lower {0} is progress the line alone does not show.', hd)}
           </div>}
-        </> : <div className="muted small">{t('Finish your first workout to see progress curves here.')}</div>}
+        </> : <div className="muted small">{muscle
+          ? `No hay ejercicios registrados que involucren ${t(MUSCLE_NAME[muscle])} todavía.`
+          : t('Finish your first workout to see progress curves here.')}</div>}
       </div>
     </div>
 
