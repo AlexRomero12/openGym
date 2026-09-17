@@ -24,6 +24,7 @@ export default function Settings() {
   const nav = useNavigate()
   const S = useStore(s => s.S)
   const user = useStore(s => s.user)
+  const config = useStore(s => s.config)
   const coachLocal = useStore(s => s.coachLocal)
   const { update, replaceState, setUser, pullState, pushState, adoptProfile, signOut, signOutAll, resetDemo, disconnectServer } = useStore()
   const toast = useUI(s => s.toast)
@@ -228,6 +229,13 @@ export default function Settings() {
       <Row icon="sparkles" iconTint="var(--acc)" title={t('AI Coach')} accessory="chevron"
         subtitle={coachLocal?.mode === 'server' ? t('Runs on your openGym server') : coachLocal?.mode === 'byok' ? t('Runs on this phone with your own API key') : t('Off — choose how the Coach should run.')}
         onClick={() => nav('/coach/setup')} />
+    </Section>}
+
+    {/* ---------- on the web, when each profile brings their own account ---------- */}
+    {!MOBILE && user && !!config?.coach?.enabled && config.coach.authMode === 'profile' && <Section title={t('AI Coach')}>
+      <Row icon="key" iconTint="var(--acc)" title={t('My AI account')} accessory="chevron"
+        subtitle={t('Connect your own provider account — the Coach runs only for you, and the requests are charged to you.')}
+        onClick={() => nav('/coach/account')} />
     </Section>}
 
     {/* ---------- general ---------- */}

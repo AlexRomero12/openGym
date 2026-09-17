@@ -192,12 +192,24 @@ export function saveOptions(provider, patch) {
 
 /* Deliberately its own file rather than a field on state-<uid>.json. Profile state syncs across
    devices and travels in the user's JSON export; a credential that rides along in a backup is
-   the same class of mistake as a token inside the directory the README tells you to archive. */
+   the same class of mistake as a token inside the directory the README tells you to archive.
+
+   In profile mode the record holds more than the credential: the provider this person chose, the
+   model and, for an OpenAI-compatible endpoint, its base URL. Provider-per-profile is what makes
+   "each one brings their account" mean Anthropic for one and a model on somebody's LAN for the
+   next — the instance-wide `provider` only decides instance mode. */
 const uidSafe = uid => /^[A-Za-z0-9_-]{1,64}$/.test(String(uid || ''));
 export function profileAuthFile(uid) {
   if (!uidSafe(uid)) throw new Error('bad profile id');
   return path.join(DATA, `coach-auth-${uid}.json`);
 }
+
+/** The providers a profile may choose in profile mode: the plain-HTTPS ones. A runtime-backed
+ *  provider needs the bigger image, a job directory and a privilege drop whose credential home
+ *  is instance-level; that is instance mode's shape, not something to hand a profile. */
+export const PROFILE_PROVIDERS = Object.freeze(
+  Object.keys(PROVIDERS).filter(id => PROVIDERS[id].http)
+);
 export function loadProfileAuth(uid) {
   try { return JSON.parse(fs.readFileSync(profileAuthFile(uid), 'utf8')); } catch { return null; }
 }
@@ -224,29 +236,65 @@ export const SHARED_ACCOUNT_REFUSAL =
  */
 export function credentialFor(uid) {
   const cfg = load();
-  if (cfg.provider === 'fixture') return { ok: true, auth: null, mode: cfg.authMode };
+  if (cfg.provider === 'fixture' && cfg.authMode !== 'profile') return { ok: true, auth: null, mode: cfg.authMode, provider: 'fixture' };
 
   if (cfg.authMode === 'profile') {
     const rec = loadProfileAuth(uid);
+    // The provider comes from the profile's own record. A record filed before provider-per-
+    // profile existed (or by hand, without one) falls back to the instance's — the same shape
+    // upstream shipped, kept readable rather than refused.
+    const provider = rec && PROVIDERS[rec.provider] ? rec.provider : cfg.provider;
+    const meta = PROVIDERS[provider] || PROVIDERS.fixture;
     const auth = rec && rec.data ? decrypt(rec.data) : null;
-    if (!auth || !auth.token) return { ok: false, reason: 'no-credential', mode: 'profile' };
-    return { ok: true, auth, type: rec.type, account: rec.account || null, mode: 'profile' };
+    if (!auth || !auth.token) {
+      // An endpoint that takes no key (a model on the LAN) is connected as soon as the profile
+      // filed it — but unlike instance mode there is no admin-chosen endpoint to fall back on,
+      // so the record itself has to exist and, where one is required, name a base URL.
+      if (rec && meta.keyOptional && !rec.data && (!meta.baseUrl || rec.baseUrl)) {
+        return { ok: true, auth: null, type: null, account: null, mode: 'profile', provider, model: rec.model || null, baseUrl: rec.baseUrl || null };
+      }
+      return { ok: false, reason: 'no-credential', mode: 'profile', provider };
+    }
+    return { ok: true, auth, type: rec.type || 'apikey', account: rec.account || null, mode: 'profile', provider, model: rec.model || null, baseUrl: rec.baseUrl || null };
   }
 
   // instance mode
   const bound = boundUidFor(cfg);
   if (bound && bound !== uid) {
-    return { ok: false, reason: 'shared-account', message: SHARED_ACCOUNT_REFUSAL, mode: 'instance' };
+    return { ok: false, reason: 'shared-account', message: SHARED_ACCOUNT_REFUSAL, mode: 'instance', provider: cfg.provider };
   }
   const rec = authFor(cfg);
   const auth = rec && rec.data ? decrypt(rec.data) : null;
   if (!auth || !auth.token) {
     // An endpoint that takes no key (a model on the LAN) is connected without one. Only when
     // nothing was ever filed — a filed key that fails to decrypt is still a failure.
-    if (providerMeta(cfg).keyOptional && !rec) return { ok: true, auth: null, type: null, account: null, mode: 'instance' };
-    return { ok: false, reason: 'no-credential', mode: 'instance' };
+    if (providerMeta(cfg).keyOptional && !rec) return { ok: true, auth: null, type: null, account: null, mode: 'instance', provider: cfg.provider };
+    return { ok: false, reason: 'no-credential', mode: 'instance', provider: cfg.provider };
   }
-  return { ok: true, auth, type: rec.type, account: rec.account || null, mode: 'instance' };
+  return { ok: true, auth, type: rec.type, account: rec.account || null, mode: 'instance', provider: cfg.provider };
+}
+
+/**
+ * Which provider, model, endpoint and credential a job for this profile runs on. Instance mode
+ * answers from coach.json; profile mode from the profile's own record, so two people on the
+ * same server can run two different providers and never touch each other's account.
+ *
+ * `credential` is resolved here too, so callers that only want "may this job run" do not have
+ * to reach for the token themselves.
+ */
+export function effectiveFor(uid) {
+  const cfg = load();
+  if (cfg.authMode !== 'profile') {
+    return { provider: cfg.provider, model: modelFor(cfg), baseUrl: null, credential: credentialFor(uid) };
+  }
+  const rec = loadProfileAuth(uid);
+  const provider = rec && PROVIDERS[rec.provider] ? rec.provider : cfg.provider;
+  return {
+    provider,
+    model: (rec && rec.model) || modelFor(cfg, provider),
+    baseUrl: (rec && rec.baseUrl) || null,
+    credential: credentialFor(uid)
+  };
 }
 
 /* Which credential types are one person's *subscription* — a Claude Code setup token or an
@@ -272,15 +320,56 @@ export function bindInstanceCredential(uid) {
 export function accountFor(uid) {
   const cfg = load();
   const c = credentialFor(uid);
+  const provider = c.provider || cfg.provider;
   return {
     mode: cfg.authMode,
-    provider: cfg.provider,
-    providerLabel: providerMeta(cfg).label,
+    provider,
+    providerLabel: (PROVIDERS[provider] || providerMeta(cfg)).label,
+    // The model and endpoint are the profile's own in profile mode, the instance's otherwise.
+    model: c.model || modelFor(cfg, provider),
+    baseUrl: c.baseUrl || null,
     account: c.ok ? (c.account || null) : null,
     connected: !!c.ok,
     reason: c.ok ? null : c.reason,
     message: c.ok ? null : (c.message || null)
   };
+}
+
+/**
+ * File (or replace) a profile's own account record. The caller has already validated the
+ * provider and the endpoint; this only owns the shape and the encryption. `data` is kept when
+ * no new token arrives and the provider has not changed, so editing the model does not mean
+ * pasting the key again.
+ */
+export function saveProfileAccount(uid, { provider, token, model, baseUrl, account }) {
+  const prev = loadProfileAuth(uid);
+  const keep = prev && prev.provider === provider && prev.data && !token ? prev.data : null;
+  return saveProfileAuth(uid, {
+    provider,
+    type: 'apikey',
+    account: String(account || '').slice(0, 120),
+    data: token ? encrypt({ token }) : keep,
+    model: model ? String(model).slice(0, 80) : null,
+    baseUrl: baseUrl || null,
+    connectedAt: new Date().toISOString()
+  });
+}
+
+/** Counts only, for the admin card: how many profiles have filed their own account. */
+export function profileSummary() {
+  let connected = 0, total = 0;
+  try {
+    for (const f of fs.readdirSync(DATA)) {
+      if (!/^coach-auth-[A-Za-z0-9_-]{1,64}\.json$/.test(f)) continue;
+      total++;
+      try {
+        const rec = JSON.parse(fs.readFileSync(path.join(DATA, f), 'utf8'));
+        const ok = rec && (rec.data ? !!decrypt(rec.data) : !!(rec.provider && PROVIDERS[rec.provider] && PROVIDERS[rec.provider].keyOptional));
+        if (ok) connected++;
+      } catch { /* an unreadable file counts as not connected, never as a crash */ }
+    }
+  } catch { /* no data directory yet */ }
+  return { connected, total };
 }
 
 /* ---------- derived state ---------- */
@@ -310,7 +399,16 @@ export function isConnected() {
 export function publicConfig() {
   if (!isEnabled() || !isConnected()) return null;
   const cfg = load();
-  return { enabled: true, provider: cfg.provider, providerLabel: providerMeta(cfg).label, authMode: cfg.authMode, community: !!cfg.community };
+  // In profile mode the provider is nobody's until a profile connects its own: naming the
+  // instance's would be a lie for everyone on the box.
+  const profile = cfg.authMode === 'profile';
+  return {
+    enabled: true,
+    provider: profile ? null : cfg.provider,
+    providerLabel: profile ? null : providerMeta(cfg).label,
+    authMode: cfg.authMode,
+    community: !!cfg.community
+  };
 }
 
 /**
@@ -321,7 +419,9 @@ export function publicConfig() {
  */
 export function jobEnv(jobDir, resolved) {
   const cfg = load();
-  const meta = providerMeta(cfg);
+  // The credential names its own provider: in profile mode the job's provider is the profile's
+  // choice, not the instance's, and the variable the token travels under follows from it.
+  const meta = PROVIDERS[(resolved && resolved.provider) || cfg.provider] || providerMeta(cfg);
   const env = { PATH: '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin', HOME: jobDir, TMPDIR: jobDir };
   const auth = resolved && resolved.auth;
   if (auth && auth.token) {

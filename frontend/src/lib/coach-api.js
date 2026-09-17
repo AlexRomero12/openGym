@@ -70,6 +70,26 @@ export const coachAccount = async () =>
 export const connectCredential = body => api('/api/admin/coach/connect', { method: 'POST', body: JSON.stringify(body) })
 export const disconnectCredential = () => api('/api/admin/coach/disconnect', { method: 'POST', body: '{}' })
 
+/* Profile mode: this profile's own account. `coachSetup` is what the account screen reads
+   (mode, connected state, provider table); the models call is the round trip that checks a
+   key before anything is stored; `coachConnect` files it, write-only like the admin's. */
+export const coachSetup = async () =>
+  DEMO ? { authMode: 'demo', canConnect: false, connected: true, providers: [] }
+    : LOCAL() ? { authMode: 'device', canConnect: false, connected: true, providers: [] }
+      : api('/api/coach/setup')
+export const coachModels = async (provider, key, baseUrl) => {
+  if (DEMO || LOCAL()) return { ok: false, error: 'this build runs the Coach itself', models: [] }
+  return api('/api/coach/credential/models', { method: 'POST', body: JSON.stringify({ provider, key: key || null, baseUrl: baseUrl || null }) })
+}
+export const coachConnect = async body => {
+  if (DEMO || LOCAL()) return { ok: true }
+  return api('/api/coach/credential', { method: 'POST', body: JSON.stringify(body) })
+}
+export const coachDisconnect = async () => {
+  if (DEMO || LOCAL()) return { ok: true }
+  return api('/api/coach/credential/remove', { method: 'POST', body: '{}' })
+}
+
 /**
  * Live job/proposal state.
  *
@@ -121,6 +141,7 @@ export const JOB_ERRORS = {
   busy: 'The Coach is already thinking about your training.',
   cap: 'The Coach is resting — try again tomorrow.',
   consent: 'The Coach needs your go-ahead first.',
+  connect: 'Connect your own AI account first — Settings → AI Coach.',
   timeout: 'The Coach took too long and gave up.',
   auth: 'The Coach couldn’t sign in to its provider — the instance owner needs to check its setup.',
   missing: 'The Coach isn’t installed properly on this instance.',

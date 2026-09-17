@@ -19,12 +19,15 @@ const USER_ERROR = {
   busy: 'the Coach is already thinking about your training',
   cap: 'the Coach is resting — try again tomorrow',
   consent: 'the Coach needs your go-ahead first',
+  // Profile mode, no credential of your own: the one thing that resolves it is connecting one,
+  // so the message says that rather than blaming the instance.
+  connect: 'connect your own AI account under Settings → AI Coach',
   // Verbatim, because it tells the user the one thing that resolves it and names who resolves
   // it. A vaguer message here turns into a support question for the person running the box.
   shared: cfgStore.SHARED_ACCOUNT_REFUSAL,
   unprivileged: 'the Coach is switched off on this instance for safety reasons'
 };
-const HTTP_FOR = { off: 503, busy: 409, cap: 429, consent: 403, shared: 409, unprivileged: 503 };
+const HTTP_FOR = { off: 503, busy: 409, cap: 429, consent: 403, connect: 409, shared: 409, unprivileged: 503 };
 
 export function coachRoutes({ json, readBody, readSession, requireAdmin }) {
   /** Every user route starts the same way: signed in, feature on, feature reachable. */
@@ -47,11 +50,17 @@ export function coachRoutes({ json, readBody, readSession, requireAdmin }) {
     // that reads it sits behind a session anyway, and on an invite-only instance which provider
     // this box is wired to is nobody's business who has not been let in.
     'GET /api/coach/disclosure': async (req, res) => {
-      if (!readSession(req)) return json(res, 401, { error: 'not signed in' });
+      const user = readSession(req);
+      if (!user) return json(res, 401, { error: 'not signed in' });
       const cfg = cfgStore.load();
+      // In profile mode the provider is the one this person connected; before they connect,
+      // there is genuinely nobody to name yet — the UI says "your provider" rather than
+      // borrowing the instance's leftover choice.
+      const c = cfgStore.credentialFor(user.id);
+      const provider = c.ok || cfg.authMode !== 'profile' ? (c.provider || cfg.provider) : null;
       json(res, 200, {
-        provider: cfg.provider,
-        providerLabel: cfgStore.providerMeta(cfg).label,
+        provider,
+        providerLabel: provider ? (cfgStore.PROVIDERS[provider] || {}).label || null : null,
         categories: DATA_CATEGORIES,
         version: 1
       });
@@ -126,22 +135,120 @@ export function coachRoutes({ json, readBody, readSession, requireAdmin }) {
       json(res, 200, { ok: true });
     },
 
+    /* ---------------- profile mode: each profile its own account ----------------
+       Three routes, one owner: everything below acts on the signed-in profile's record and
+       nothing else. Nobody can read back a token, not even the admin, and no route takes a
+       profile id — the session is the id. */
+
+    /* What the "my AI account" screen needs: the mode, whether this profile is connected, and
+       the provider table to choose from. Signed in only, and only while the feature is on —
+       filing a credential for a Coach nobody can run would just be storing a secret for nothing. */
+    'GET /api/coach/setup': async (req, res) => {
+      const user = readSession(req);
+      if (!user) return json(res, 401, { error: 'not signed in' });
+      if (!cfgStore.isEnabled()) return json(res, 503, { error: USER_ERROR.off });
+      const cfg = cfgStore.load();
+      const c = cfgStore.credentialFor(user.id);
+      json(res, 200, {
+        authMode: cfg.authMode,
+        canConnect: cfg.authMode === 'profile',
+        connected: !!c.ok,
+        provider: c.provider || null,
+        providerLabel: c.provider ? ((cfgStore.PROVIDERS[c.provider] || {}).label || null) : null,
+        model: c.model || null,
+        baseUrl: c.baseUrl || null,
+        account: c.ok ? (c.account || null) : null,
+        providers: cfgStore.PROFILE_PROVIDERS.map(id => {
+          const p = cfgStore.PROVIDERS[id];
+          return { id, label: p.label, keyPlaceholder: p.keyPlaceholder || null, baseUrl: !!p.baseUrl, keyOptional: !!p.keyOptional, defaultModel: p.defaultModel || null };
+        })
+      });
+    },
+
+    /* The models an endpoint serves, listed with the key on its way in (or the one already
+       filed): the round trip that doubles as the "does this key work" answer, before anything
+       is stored. Plain-HTTPS providers only — a runtime provider has no such endpoint. */
+    'POST /api/coach/credential/models': async (req, res) => {
+      const user = readSession(req);
+      if (!user) return json(res, 401, { error: 'not signed in' });
+      if (!cfgStore.isEnabled()) return json(res, 503, { error: USER_ERROR.off });
+      const cfg = cfgStore.load();
+      if (cfg.authMode !== 'profile') return json(res, 400, { error: 'this instance uses a shared account' });
+      const body = await readBody(req);
+      const id = String(body.provider || '');
+      const meta = cfgStore.PROVIDERS[id];
+      if (!meta || !meta.http) return json(res, 400, { error: 'unknown provider' });
+      const v = meta.baseUrl ? validateBaseUrl(body.baseUrl) : { ok: true, value: null };
+      if (!v.ok) return json(res, 400, { error: v.error });
+      if (meta.baseUrl && !v.value) return json(res, 400, { error: 'this provider needs an endpoint' });
+      const stored = cfgStore.credentialFor(user.id);
+      const key = String(body.key || '').trim() || (stored.ok && stored.provider === id && stored.auth ? stored.auth.token : null);
+      if (!key && !meta.keyOptional) return json(res, 400, { error: 'no API key supplied' });
+      const jobCfg = {
+        ...cfg, provider: id,
+        providerOptions: { ...(cfg.providerOptions || {}), [id]: { ...((cfg.providerOptions || {})[id] || {}), ...(v.value ? { baseUrl: v.value } : {}) } }
+      };
+      const env = cfgStore.jobEnv(process.env.TMPDIR || '/tmp', { provider: id, type: 'apikey', auth: key ? { token: key } : null });
+      json(res, 200, await adapterFor(id).models(jobCfg, env));
+    },
+
+    /* File this profile's own account. The token goes up once and is never read back: it leaves
+       again only as the provider variable on this profile's own jobs. The provider, model and
+       endpoint are filed with it — that is what lets the next profile choose different ones. */
+    'POST /api/coach/credential': async (req, res) => {
+      const user = readSession(req);
+      if (!user) return json(res, 401, { error: 'not signed in' });
+      if (!cfgStore.isEnabled()) return json(res, 503, { error: USER_ERROR.off });
+      const cfg = cfgStore.load();
+      if (cfg.authMode !== 'profile') return json(res, 400, { error: 'this instance uses a shared account' });
+      const body = await readBody(req);
+      const id = String(body.provider || '');
+      const meta = cfgStore.PROVIDERS[id];
+      if (!meta || !meta.http) return json(res, 400, { error: 'unknown provider' });
+      const v = meta.baseUrl ? validateBaseUrl(body.baseUrl) : { ok: true, value: null };
+      if (!v.ok) return json(res, 400, { error: v.error });
+      if (meta.baseUrl && !v.value) return json(res, 400, { error: 'this provider needs an endpoint' });
+      const token = String(body.key || '').trim();
+      const prev = cfgStore.loadProfileAuth(user.id);
+      const keep = prev && prev.provider === id && prev.data;
+      if (!token && !meta.keyOptional && !keep) return json(res, 400, { error: 'no API key supplied' });
+      cfgStore.saveProfileAccount(user.id, { provider: id, token, model: body.model ? String(body.model) : null, baseUrl: v.value, account: body.account });
+      json(res, 200, { ok: true, account: cfgStore.accountFor(user.id) });
+    },
+
+    /* Replacing one provider with another, or leaving the Coach: the profile's own record is
+       the only thing this removes. A job already queued resolves its credential at run time
+       and fails with `connect`, which is the honest answer. */
+    'POST /api/coach/credential/remove': async (req, res) => {
+      const user = readSession(req);
+      if (!user) return json(res, 401, { error: 'not signed in' });
+      const cfg = cfgStore.load();
+      if (cfg.authMode !== 'profile') return json(res, 400, { error: 'this instance uses a shared account' });
+      cfgStore.clearProfileAuth(user.id);
+      json(res, 200, { ok: true });
+    },
+
     /* ------------------------------ admin ------------------------------ */
 
     'GET /api/admin/coach': async (req, res) => {
       if (!requireAdmin(req, res)) return;
       const cfg = cfgStore.load();
-      const adapter = adapterFor(cfg.provider);
+      const profile = cfg.authMode === 'profile';
+      const adapter = profile ? null : adapterFor(cfg.provider);
       // For the runtime-backed providers this asks "is the runtime there"; for an HTTPS one it
       // lists the models with the stored key, which is the round trip the card wants anyway.
-      const cred = adapter?.spawns === false ? cfgStore.credentialFor(cfgStore.boundUidFor(cfg)) : undefined;
-      const check = adapter ? await adapter.check(cfg, cfgStore.jobEnv(process.env.TMPDIR || '/tmp', cred?.ok ? cred : undefined)) : { ok: false, error: 'unknown provider' };
+      // In profile mode there is no instance credential, so there is nothing to ask with — the
+      // card says so rather than showing a failure that sounds like the instance is broken.
+      const cred = !profile && adapter?.spawns === false ? cfgStore.credentialFor(cfgStore.boundUidFor(cfg)) : undefined;
+      const check = profile ? { ok: true, perProfile: true }
+        : adapter ? await adapter.check(cfg, cfgStore.jobEnv(process.env.TMPDIR || '/tmp', cred?.ok ? cred : undefined))
+          : { ok: false, error: 'unknown provider' };
       const log = cfg.log || [];
       const today = new Date().toISOString().slice(0, 10);
       json(res, 200, {
         disabledByEnv: cfgStore.COACH_DISABLED,
         enabled: !!cfg.enabled,
-        provider: cfg.provider,
+        provider: profile ? null : cfg.provider,
         providers: Object.entries(cfgStore.PROVIDERS).map(([id, p]) => ({
           id, label: p.label, runtime: p.runtime,
           setupToken: !!p.setupToken, deviceLogin: !!p.deviceLogin, apiKey: !!p.apiKeyEnv,
@@ -150,20 +257,23 @@ export function coachRoutes({ json, readBody, readSession, requireAdmin }) {
           // Which providers already hold a key — so switching chips is visibly not a reset.
           connected: !!(cfgStore.authFor(cfg, id) && cfgStore.authFor(cfg, id).data)
         })),
-        model: cfgStore.modelFor(cfg),
+        model: profile ? null : cfgStore.modelFor(cfg),
         models: cfg.models,
-        baseUrl: cfgStore.providerMeta(cfg).http ? baseUrlFor(cfg.provider, cfg) : null,
-        knownModels: check.models || null,
+        baseUrl: !profile && cfgStore.providerMeta(cfg).http ? baseUrlFor(cfg.provider, cfg) : null,
+        knownModels: profile ? null : (check.models || null),
         caps: cfg.caps,
         community: !!cfg.community,
-        runtime: { ok: !!check.ok, version: check.version || null, error: check.error || null, needsKey: !!check.needsKey },
+        runtime: profile
+          ? { ok: true, perProfile: true, version: null, error: null, needsKey: false }
+          : { ok: !!check.ok, version: check.version || null, error: check.error || null, needsKey: !!check.needsKey },
         authMode: cfg.authMode,
         boundUid: cfgStore.boundUidFor(cfg),
         /* Whether a credential is filed, and whose — never the credential. `unreadable` is its
            own state rather than "not connected" because it has a specific cause and a specific
            fix: ./data was restored without its `secret`, so the blob is intact and undecryptable,
-           and connecting again is the way out. */
-        auth: (() => {
+           and connecting again is the way out. In profile mode there is no instance credential
+           at all: each profile's own state lives on its screen, and the card gets counts. */
+        auth: profile ? { state: 'per-profile' } : (() => {
           const meta = cfgStore.providerMeta(cfg);
           const rec = cfgStore.authFor(cfg);
           if (!meta.oauthEnv && !meta.apiKeyEnv) return { state: 'not-required' };
@@ -171,13 +281,16 @@ export function coachRoutes({ json, readBody, readSession, requireAdmin }) {
           if (!cfgStore.decrypt(rec.data)) return { state: 'unreadable' };
           return { state: 'connected', type: rec.type || null, account: rec.account || null, connectedAt: rec.connectedAt || null };
         })(),
+        profiles: cfgStore.profileSummary(),
         // Whether the privilege drop can actually be performed. Surfaced because the control
         // now fails closed: if this reads false, no job runs, and the admin needs to know that
         // from the card rather than from a user reporting that nothing happens. An HTTPS
         // provider has no process to drop, and the card must not show a red banner for it.
-        unprivileged: adapter?.spawns === false
-          ? { ok: true, dropped: false, why: 'this provider runs no child process' }
-          : canDropPrivileges(),
+        unprivileged: profile
+          ? { ok: true, dropped: false, why: 'each profile runs over HTTPS' }
+          : adapter?.spawns === false
+            ? { ok: true, dropped: false, why: 'this provider runs no child process' }
+            : canDropPrivileges(),
         // Counts and outcomes only — never intake answers, payloads or proposals (FR-12/A4).
         // The same counter the instance cap reads, so the card and the cap cannot disagree.
         jobsToday: cfg.daily?.date === today ? cfg.daily.count : 0,
@@ -193,6 +306,17 @@ export function coachRoutes({ json, readBody, readSession, requireAdmin }) {
       const patch = {};
       if (body.enabled !== undefined) patch.enabled = !!body.enabled;
       const current = cfgStore.load();
+      if (body.authMode !== undefined) {
+        const mode = body.authMode === 'profile' ? 'profile' : 'instance';
+        // Switching modes resets the daily caps to that mode's defaults, because "10/day" means
+        // two different things: in instance mode it bounds what one profile can spend of the
+        // owner's account; in profile mode everybody pays their own, and 0 (no limit) is the
+        // starting point. The card renders the new values, so the reset is visible, not silent.
+        if (mode !== current.authMode) {
+          patch.authMode = mode;
+          patch.caps = mode === 'profile' ? { perProfileDaily: 0, instanceDaily: 0 } : { perProfileDaily: 10, instanceDaily: 0 };
+        }
+      }
       if (body.provider !== undefined) {
         if (!cfgStore.PROVIDERS[body.provider]) return json(res, 400, { error: 'unknown provider' });
         // Credentials, model and endpoint are all keyed by provider — switching never drops them.

@@ -16,7 +16,7 @@ import { t } from '../lib/i18n.js'
 import { DAYN } from '../lib/format.js'
 import { EXDB } from '../lib/exercises.js'
 import { emptyCoach, coachAvailable, hasConsent, CONSENT_VERSION, CATEGORY_TEXT, appendChat } from '../lib/coach.js'
-import { requestPlan, disclosure } from '../lib/coach-api.js'
+import { requestPlan, disclosure, coachAccount } from '../lib/coach-api.js'
 import { DEMO } from '../lib/demo.js'
 import { MOBILE } from '../lib/mobile.js'
 import Icon from '../components/Icon.jsx'
@@ -69,7 +69,23 @@ export default function CoachIntake() {
   }))
   const set = patch => setP(v => ({ ...v, ...patch }))
 
+  // Profile mode: answering the questionnaire and only then discovering there is no account
+  // wastes the person's time and ends in a failed job. The account screen comes first; this
+  // screen steps aside for it when reached directly.
+  const ownAccount = !DEMO && !(MOBILE && coachMode === 'byok') && config?.coach?.authMode === 'profile'
+  const [acct, setAcct] = useState(null)
+  useEffect(() => {
+    if (!ownAccount) return
+    let on = true
+    coachAccount().then(a => { if (on) setAcct(a) }).catch(() => {})
+    return () => { on = false }
+  }, [ownAccount])
+  useEffect(() => {
+    if (ownAccount && acct && !acct.connected) nav('/coach/account', { replace: true })
+  }, [ownAccount, acct])
+
   if (!coachAvailable(config, user, { demo: DEMO, mobile: MOBILE, coachMode })) { nav('/home', { replace: true }); return null }
+  if (ownAccount && (!acct || !acct.connected)) return null
 
   const key = STEPS[step]
   const last = step === STEPS.length - 1

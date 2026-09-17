@@ -27,7 +27,7 @@ import {
   changeTitle, changeValues, exName, canRevert, revertLast
 } from '../lib/coach.js'
 import { insightsFor, sessionInsights } from '../lib/coach-insights.js'
-import { useCoachStatus, requestReview, requestDebrief, requestPlan, refinePlan, resolvePending, cohortStats, setCohortShare, jobErrorText } from '../lib/coach-api.js'
+import { useCoachStatus, requestReview, requestDebrief, requestPlan, refinePlan, resolvePending, cohortStats, setCohortShare, jobErrorText, coachAccount } from '../lib/coach-api.js'
 import { confirmSheet } from '../sheets.jsx'
 import Icon from '../components/Icon.jsx'
 import LineChart from '../components/LineChart.jsx'
@@ -53,13 +53,26 @@ export default function CoachChat() {
 
   const ok = coachAvailable(config, user, { demo: DEMO, mobile: MOBILE, coachMode })
   const ready = ok && hasConsent(S) && !!S.coach?.profile
+  // Profile mode: the instance offers the Coach, but this profile's own account is what makes
+  // it usable, and only the account screen can change that. Asked once per visit to the screen.
+  const ownAccount = !DEMO && !(MOBILE && coachMode === 'byok') && config?.coach?.authMode === 'profile'
+  const [acct, setAcct] = useState(null)
+  useEffect(() => {
+    if (!ownAccount) { setAcct(null); return }
+    let on = true
+    coachAccount().then(a => { if (on) setAcct(a) }).catch(() => {})
+    return () => { on = false }
+  }, [ownAccount])
   // Not before the store has loaded: a cold start straight on #/coach would otherwise read an
   // empty state, decide there is no consent, and bounce a consenting user into the intake.
   useEffect(() => {
     if (!storeReady) return
-    if (!ok) nav('/home', { replace: true })
-    else if (!ready) nav('/coach/intake', { replace: true })
-  }, [storeReady, ok, ready])
+    if (!ok) { nav('/home', { replace: true }); return }
+    // Nobody is pushed into the intake before they have an account: its last step asks for a
+    // plan, and a job that cannot run is a failure waiting to happen.
+    if (ownAccount && (!acct || !acct.connected)) return
+    if (!ready) nav('/coach/intake', { replace: true })
+  }, [storeReady, ok, ready, ownAccount, acct])
 
   // A job that ends is either a proposal, "nothing to change", or a failure. The server tells
   // the client none of that directly — the job simply stops appearing — so the transition is
@@ -84,6 +97,10 @@ export default function CoachChat() {
   }, [job, pending, loading])
 
   useEffect(() => { if (typeof endRef.current?.scrollIntoView === 'function') endRef.current.scrollIntoView({ block: 'end' }) }, [S.coach?.chat?.length, !!job, !!pending])
+
+  // Profile mode without an account of its own: a screen that says what to do, rather than a
+  // chat whose first question would come back as an error.
+  if (ownAccount && acct && !acct.connected) return <ConnectAccount nav={nav} />
 
   if (!ready) return null
   const coach = S.coach || emptyCoach()
@@ -147,6 +164,9 @@ export default function CoachChat() {
       {idle && !!lastWorkout && <Row icon="checkCircle" iconTint="var(--green)" title={t('Review my last workout')} subtitle={t('What went well, what to watch, what to do next time')} accessory="chevron" onClick={() => { close(); askDebrief() }} />}
       {idle && !!(S.routines || []).length && <Row icon="wrench" iconTint="var(--orange)" title={t('Improve a routine')} subtitle={t('Pick one; the Coach works on just that')} accessory="chevron" onClick={() => { close(); pickRoutine() }} />}
       {community && <Row icon="person" iconTint="var(--teal)" title={t('Compare with others here')} subtitle={t('Anonymous medians from this instance')} accessory="chevron" onClick={() => { close(); showCohort() }} />}
+      {ownAccount && acct?.connected && <Row icon="key" iconTint="var(--acc)" title={t('My AI account')}
+        subtitle={acct.providerLabel ? `${acct.providerLabel}${acct.model ? ' · ' + acct.model : ''}` : null} accessory="chevron"
+        onClick={() => { close(); nav('/coach/account') }} />}
       <Row icon="history" iconTint="var(--blue)" title={t('Everything the Coach proposed')} subtitle={t('Plans, suggestions and debriefs, kept')} accessory="chevron" onClick={() => { close(); showHistory() }} />
       {idle && <Row icon="sparkles" iconTint="var(--indigo)" title={t('Start a new plan')} subtitle={t('A fresh plan from your answers; your workouts stay')} accessory="chevron" onClick={() => { close(); askNewPlan() }} />}
       <Row icon="clipboard" iconTint="var(--indigo)" title={t('Edit my answers')} subtitle={t('Goal, days, equipment, limits')} accessory="chevron" onClick={() => { close(); nav('/coach/intake?edit=1') }} />
@@ -716,6 +736,27 @@ function CohortSheet({ S, update, toast }) {
       {!d.exercises.length && <div className="chat-empty">{t('No exercise is trained by three or more people yet.')}</div>}
     </div>}
     <div style={{ height: 10 }} />
+  </div>
+}
+
+/* ------------------------------ profile mode: connect ------------------------------ */
+
+/* The first screen of profile mode: the Coach exists, but it is nobody's until this profile
+   connects an account. Nothing here loads the chat — there is nothing to say yet. */
+function ConnectAccount({ nav }) {
+  return <div className="narrow">
+    <div className="hdr">
+      <button className="iconbtn" onClick={() => nav('/plan')} aria-label={t('Back')}><Icon name="chevronLeft" /></button>
+      <div style={{ flex: 1, marginLeft: 10 }}><h1>{t('Coach')}</h1></div>
+    </div>
+    <Section title={t('Your own AI account')}
+      footer={t('Your key is stored encrypted on this server and used only for your own Coach runs — not even the admin can read it. The requests are charged to your provider account.')}>
+      <Row icon="key" iconTint="var(--acc)" title={t('Connect my account')} accessory="chevron"
+        subtitle={t('Anthropic, OpenAI, Gemini or your own compatible endpoint')}
+        onClick={() => nav('/coach/account', { state: { from: 'coach' } })} />
+      <Row icon="info" iconTint="var(--blue)" title={t('How it works')}
+        subtitle={t('Everything the Coach reads stays on this server; only what you consent to travels to your provider.')} />
+    </Section>
   </div>
 }
 

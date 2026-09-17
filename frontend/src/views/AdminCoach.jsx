@@ -84,18 +84,20 @@ export default function AdminCoach() {
   </div>
 
   const meta = d.providers.find(p => p.id === d.provider) || {}
+  const profile = d.authMode === 'profile'
   const authState = d.auth?.state
   const authed = authState === 'connected' || authState === 'not-required' || authState === 'optional'
   const needsEndpoint = !!meta.baseUrl
   const hasEndpoint = !needsEndpoint || !!d.baseUrl
-  const live = d.enabled && d.runtime.ok && authed && hasEndpoint
+  const live = d.enabled && (profile || (d.runtime.ok && authed && hasEndpoint))
 
   const status = !d.enabled ? 'Off — users see no Coach anywhere in the app.'
-    : live ? <>On · {meta.label}{d.model ? ' · ' + d.model : ''}</>
-      : !hasEndpoint ? 'On, but no endpoint yet — finish step 2.'
-        : !authed ? 'On, but no credential yet — finish the Credential step.'
-          : !d.runtime.ok ? 'On, but the provider cannot be reached — see the Test step.'
-            : 'On'
+    : profile ? <>On · each profile connects their own account{d.profiles?.connected ? ` · ${d.profiles.connected} connected` : ''}</>
+      : live ? <>On · {meta.label}{d.model ? ' · ' + d.model : ''}</>
+        : !hasEndpoint ? 'On, but no endpoint yet — finish step 2.'
+          : !authed ? 'On, but no credential yet — finish the Credential step.'
+            : !d.runtime.ok ? 'On, but the provider cannot be reached — see the Test step.'
+              : 'On'
 
   // Chips, grouped.
   const groups = [
@@ -144,13 +146,33 @@ export default function AdminCoach() {
       <span className={'adm-pill ' + (live ? 'ok' : 'warn')}>{live ? 'ready' : 'not ready'}</span>
       <span>{status}</span>
     </div>
-    {!live && <div className="adm-progress" aria-hidden="true"><i style={{ width: Math.round(doneCount / flags.length * 100) + '%' }} /></div>}
+    {!live && !profile && <div className="adm-progress" aria-hidden="true"><i style={{ width: Math.round(doneCount / flags.length * 100) + '%' }} /></div>}
     <div className="adm-lead">
-      {live ? 'Users find the Coach under Plan → Coach. This switch is the only place it can be turned off for everyone.'
-        : `${doneCount} of ${flags.length} steps done — finish the open step and the next one unfolds.`}
+      {profile ? 'Each profile connects their own account under Settings → AI Coach. Only the key’s owner spends it, and nobody can read it back — not even you.'
+        : live ? 'Users find the Coach under Plan → Coach. This switch is the only place it can be turned off for everyone.'
+          : `${doneCount} of ${flags.length} steps done — finish the open step and the next one unfolds.`}
     </div>
 
+    {/* Whose account pays — the one decision that shapes everything below. In profile mode the
+        admin never holds a credential: the card only counts how many profiles have connected. */}
     {d.enabled && <>
+      <div className="adm-group-t" style={{ marginTop: 14 }}>Whose account pays</div>
+      <div className="row between" style={{ gap: 12, alignItems: 'flex-start' }}>
+        <div className="adm-hint" style={{ margin: 0 }}>
+          {profile
+            ? <><b>Each profile their own.</b> Anyone can connect an Anthropic, OpenAI, Gemini or compatible-endpoint key from Settings → AI Coach. It is encrypted, only that profile’s runs use it, and no route can read it back — not even yours. Switching back resets the daily limits to the shared-account defaults.</>
+            : <><b>One account for the whole instance.</b> You connect one key below and every profile may use it under the daily limits. Turn this on to let each profile bring their own account instead.</>}
+        </div>
+        <Switch checked={profile} disabled={busy} onChange={v => patch({ authMode: v ? 'profile' : 'instance' })} />
+      </div>
+    </>}
+
+    {d.enabled && <>
+      {/* Instance mode only: the provider, endpoint, credential, model and test wizard. In
+          profile mode there is no instance credential to configure, and pretending otherwise
+          would be the one thing this mode exists to avoid. */}
+      {!profile && <>
+
       {/* ---------- provider ---------- */}
       <Step n={num()} title="Provider" hint={meta.label || 'Which AI answers the Coach'} done={step1Done} {...stepAt()}>
         <div className="adm-hint">Pick who answers. A key or token you save stays with its provider, so you can switch back and forth without pasting it again.</div>
@@ -248,13 +270,27 @@ export default function AdminCoach() {
           <span className="v">{d.runtime.ok ? <span className="adm-pill ok">ready</span> : <span className="adm-pill bad">missing</span>}{d.runtime.version ? <div className="dim small">{d.runtime.version}</div> : null}{!d.runtime.ok && d.runtime.error ? <div className="small" style={{ color: 'var(--red)' }}>{d.runtime.error}</div> : null}</span>
         </div>
       </Step>
+      </>}
+
+      {/* ---------- profile mode: no instance credential, only a count ---------- */}
+      {profile && <div style={{ marginTop: 14 }}>
+        <div className="adm-group-t">How profiles connect</div>
+        <div className="adm-hint">Each profile connects from <b>Settings → AI Coach</b> — or from the Coach itself, which offers the account screen on first open. Anthropic, OpenAI, Gemini and any OpenAI-compatible endpoint (Ollama, LM Studio, OpenRouter, a gateway) are supported, and each profile picks its own; two people can run two different providers side by side.</div>
+        <div className="adm-kv" style={{ marginTop: 10 }}>
+          <span className="k">Profiles connected</span>
+          <span className="v">{d.profiles?.connected || 0} of {d.profiles?.total || 0}</span>
+        </div>
+        <div className="adm-hint" style={{ margin: '8px 0 0' }}>Counts only. What each person asked the Coach, and the keys they filed, never appear here — a profile key is stored encrypted and no route reads it back.</div>
+      </div>}
 
       {/* ---------- advanced ---------- */}
       <details className="adm-fold">
         <summary>Advanced <Icon name="chevronRight" className="chev" /></summary>
         <div className="adm-fold-b">
           <div className="adm-group-t">Limits</div>
-          <div className="adm-hint">How many Coach runs are allowed per day. Every run is one request on the provider account above. 0 means no limit.</div>
+          <div className="adm-hint">{profile
+            ? 'With each profile on their own account there is nothing of yours to bound, so both limits start at 0 (no limit). Set one anyway if you want to cap how much the group can run in a day.'
+            : 'How many Coach runs are allowed per day. Every run is one request on the provider account above. 0 means no limit.'}</div>
           <div className="adm-kv"><span className="k">Per user, per day</span>
             <span className="v"><input className="num" type="number" min="0" max="200" defaultValue={d.caps.perProfileDaily} disabled={busy}
               onBlur={e => +e.target.value !== d.caps.perProfileDaily && patch({ caps: { ...d.caps, perProfileDaily: +e.target.value } })} /></span></div>
@@ -270,23 +306,16 @@ export default function AdminCoach() {
             <Switch checked={!!d.community} disabled={busy} onChange={v => patch({ community: v })} />
           </div>
 
-          <div className="adm-group-t" style={{ marginTop: 14 }}>Whose account pays</div>
-          <div className="adm-hint">{d.authMode === 'profile'
-            ? 'Each profile signs in with their own account.'
-            : d.auth?.type === 'apikey' || meta.http
-              ? 'One API key for the whole instance: every profile may use the Coach with it, and the daily limits above are what bound the spend.'
-              : d.boundUid
-                ? 'One personal account, already in use by one profile. Every other profile is refused, so nobody spends somebody else\'s subscription.'
-                : 'One personal account. The first profile to use it becomes the only one allowed to — every other profile is then refused. Paste an API key instead if the whole instance should have the Coach.'}</div>
-
           <div className="adm-group-t" style={{ marginTop: 14 }}>Isolation</div>
-          <div className="adm-hint">{d.unprivileged && !d.unprivileged.ok
-            ? <span style={{ color: 'var(--red)' }}>Jobs are blocked: {d.unprivileged.why}. Nothing runs until this is fixed.</span>
-            : d.unprivileged?.dropped
-              ? 'Jobs run as a separate unprivileged user that cannot read your data directory or secrets.'
-              : d.unprivileged?.why?.includes('no child process')
-                ? 'Not needed for this provider — it makes an HTTPS request and starts no program on this server.'
-                : 'Jobs run with the server\'s own user on this host (no separate user to drop to).'}</div>
+          <div className="adm-hint">{profile
+            ? 'Each profile calls its provider over HTTPS with its own key; no program runs on this server for a job.'
+            : d.unprivileged && !d.unprivileged.ok
+              ? <span style={{ color: 'var(--red)' }}>Jobs are blocked: {d.unprivileged.why}. Nothing runs until this is fixed.</span>
+              : d.unprivileged?.dropped
+                ? 'Jobs run as a separate unprivileged user that cannot read your data directory or secrets.'
+                : d.unprivileged?.why?.includes('no child process')
+                  ? 'Not needed for this provider — it makes an HTTPS request and starts no program on this server.'
+                  : 'Jobs run with the server\'s own user on this host (no separate user to drop to).'}</div>
         </div>
       </details>
 

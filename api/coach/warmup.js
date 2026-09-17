@@ -28,6 +28,9 @@ let running = false;
 
 export async function warmOnce({ log = console, fetch: fetchImpl } = {}) {
   const cfg = cfgStore.load();
+  // Profile mode: the endpoints that answer are the profiles' own, and pinging somebody's
+  // personal account on a schedule is not this server's call to make.
+  if (cfg.authMode === 'profile') return { skipped: true };
   if (!cfgStore.isEnabled() || cfg.provider !== 'compatible') return { skipped: true };
   const adapter = adapterFor(cfg.provider);
   if (!adapter || adapter.spawns !== false) return { skipped: true };

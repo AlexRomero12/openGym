@@ -46,6 +46,17 @@ indica aparte (la traducción se propone en el **PR #245**).
   del perfil; test propio en `api/push-messages.test.js` (3/3).
 - 📦 **Build.** `api/Dockerfile` copia `friends.js` y `social.js`; la instancia corre con
   `docker compose up -d --build` (**nunca** `pull`: pisaría la feature local).
+- 🧠 **Entrenador IA por perfil (cuenta propia).** El admin elige en **Admin → AI Coach → «Whose
+  account pays»** entre cuenta compartida (como antes) o **cada perfil la suya**; al cambiar de
+  modo los límites diarios vuelven a sus valores por defecto (perfil: sin tope). En modo perfil
+  cada persona conecta su proveedor desde **Ajustes → Entrenador IA** (o la pantalla que ofrece el
+  propio chat): Anthropic, OpenAI, Gemini o un endpoint compatible, con su modelo y su clave —
+  **proveedor distinto por persona**. La clave va cifrada a `data/coach-auth-<uid>.json` y ninguna
+  ruta la devuelve (ni el admin: solo ve un contador de conectados); los jobs usan el adaptador,
+  el modelo y el endpoint del perfil. Rutas nuevas: `GET /api/coach/setup`,
+  `POST /api/coach/credential`, `POST /api/coach/credential/models` y
+  `POST /api/coach/credential/remove`; tests propios en `api/test/coach-profile.test.js` y
+  `frontend/src/views/CoachAccount.test.jsx`.
 
 ## v1.3.7 — 2026-09-12
 

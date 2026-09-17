@@ -190,23 +190,26 @@ export function enqueue(uid, opts) {
   // is not a gate (FR-08/13).
   if (!S?.coach?.consent?.agreedAt) throw new CoachError('consent', 'the Coach needs your go-ahead first');
 
-  // Whose account pays. In instance mode the credential binds to the first profile that spends
-  // it and every other profile is refused outright — not warned. A warning would move the
-  // decision onto whoever clicks past it, and the decision is about spending somebody else's
-  // personal subscription.
-  const cred = cfgStore.credentialFor(uid);
-  if (!cred.ok) {
-    if (cred.reason === 'shared-account') throw new CoachError('shared', cred.message);
+  // Whose account pays, and which provider it is. Instance mode: the credential binds to the
+  // first profile that spends it, and every other profile is refused outright — not warned.
+  // Profile mode: the provider and the credential are this profile's own; a profile that has
+  // not filed one is told to connect, not that the instance is off.
+  const mode = cfgStore.load().authMode;
+  const eff = cfgStore.effectiveFor(uid);
+  if (!eff.credential.ok) {
+    if (mode === 'profile' && eff.credential.reason === 'no-credential') throw new CoachError('connect', 'this profile has no provider account connected');
+    if (eff.credential.reason === 'shared-account') throw new CoachError('shared', eff.credential.message);
     throw new CoachError('off', 'this profile has no provider account connected');
   }
-  // Spending is what binds: a personal credential (setup token, OAuth) belongs to the first
-  // profile that runs a job on it from here on; an API key binds to nobody and is shared.
-  cfgStore.bindInstanceCredential(uid);
+  // Spending is what binds: in instance mode a personal credential (setup token, OAuth) belongs
+  // to the first profile that runs a job on it from here on; an API key binds to nobody. Profile
+  // mode has nothing to bind — the record is already one person's.
+  if (mode === 'instance') cfgStore.bindInstanceCredential(uid);
 
   // The privilege drop is what keeps a provider runtime out of ./data. If it cannot be
   // performed, there is no job — see canDropPrivileges for why this is not a warning either.
   // A provider that spawns nothing has no process to drop, and is not refused for it.
-  if (adapterFor(cfgStore.load().provider)?.spawns !== false) {
+  if (adapterFor(eff.provider)?.spawns !== false) {
     const priv = canDropPrivileges();
     if (!priv.ok) throw new CoachError('unprivileged', `Coach jobs are disabled: ${priv.why}`);
   }
@@ -214,13 +217,16 @@ export function enqueue(uid, opts) {
   const caps = cfgStore.load().caps || {};
   const { used, limit } = capState(uid);
   if (limit > 0 && used >= limit) throw new CoachError('cap', 'daily limit reached');
-  if (caps.instanceDaily > 0 && instanceUsedToday() >= caps.instanceDaily) throw new CoachError('cap', 'this instance has reached its daily limit');
+  // The instance-wide cap exists to bound what the owner's account can spend, so it only
+  // applies in instance mode: with everybody on their own account there is nothing of the
+  // owner's to protect.
+  if (mode !== 'profile' && caps.instanceDaily > 0 && instanceUsedToday() >= caps.instanceDaily) throw new CoachError('cap', 'this instance has reached its daily limit');
 
   // Counted at enqueue, not at completion: the cap exists to bound what one profile can spend
   // of the owner's provider account, and queueing twenty jobs spends it whether or not the
   // twentieth ever finishes.
   bumpDaily(uid);
-  bumpInstanceDaily();
+  if (mode !== 'profile') bumpInstanceDaily();
 
   const job = {
     id: crypto.randomBytes(8).toString('hex'),
@@ -300,8 +306,17 @@ async function execute(job) {
   if (!cfgStore.isEnabled()) return finish(job, { outcome: 'failed', errorClass: 'off' });
 
   const cfg = cfgStore.load();
-  const adapter = adapterFor(cfg.provider);
+  // The job runs on the profile's own provider in profile mode: adapter, model, endpoint and
+  // credential all come from one resolution, so two profiles on the same box never share a
+  // provider by accident — and a credential removed while the job waited fails here, not with
+  // somebody else's key.
+  const eff = cfgStore.effectiveFor(job.uid);
+  if (!eff.credential.ok) return finish(job, { outcome: 'failed', errorClass: cfg.authMode === 'profile' ? 'connect' : 'off' });
+  const adapter = adapterFor(eff.provider);
   if (!adapter) return finish(job, { outcome: 'failed', errorClass: 'off' });
+  const jobCfg = eff.baseUrl
+    ? { ...cfg, provider: eff.provider, providerOptions: { ...(cfg.providerOptions || {}), [eff.provider]: { ...((cfg.providerOptions || {})[eff.provider] || {}), baseUrl: eff.baseUrl } } }
+    : cfg;
 
   if (job.kind === 'debrief' && !payloadLib.findWorkout(S, job.workoutId)) {
     return finish(job, { outcome: 'failed', errorClass: 'noworkout' });
@@ -323,7 +338,7 @@ async function execute(job) {
 
   // An HTTPS provider has no child process, so no directory for one to live in either.
   const jobDir = adapter.spawns === false ? null : fs.mkdtempSync(path.join(os.tmpdir(), 'coach-'));
-  const env = cfgStore.jobEnv(jobDir || os.tmpdir(), cfgStore.credentialFor(job.uid));
+  const env = cfgStore.jobEnv(jobDir || os.tmpdir(), eff.credential);
   const ctl = new AbortController();
   aborts.set(job.uid, ctl);
   try {
@@ -331,7 +346,7 @@ async function execute(job) {
     if (ids) shareJobDir(jobDir, ids);
 
     const attempt = await runPipeline({
-      adapter, cfg, kind: job.kind, payload, model: cfgStore.modelFor(cfg), timeoutMs: TIMEOUT_MS,
+      adapter, cfg: jobCfg, kind: job.kind, payload, model: eff.model, timeoutMs: TIMEOUT_MS,
       // The HTTP adapters take the fetch and the abort signal they are given; the runtime
       // adapters ignore both.
       invokeOpts: { jobDir, env, fetch: fetchFor(TIMEOUT_MS), signal: ctl.signal }
@@ -424,6 +439,10 @@ function removeJobDir(jobDir, ids) {
 
 export async function testRun() {
   const cfg = cfgStore.load();
+  // Profile mode has no instance credential to round-trip: every account belongs to a person,
+  // and the honest answer is that this button cannot test one. The setup screen does the real
+  // round trip when a profile connects (it lists the models with their key).
+  if (cfg.authMode === 'profile') return { ok: false, error: 'each profile connects its own account — there is nothing instance-wide to test' };
   const adapter = adapterFor(cfg.provider);
   if (!adapter) return { ok: false, error: 'no provider configured' };
   const jobDir = adapter.spawns === false ? null : fs.mkdtempSync(path.join(os.tmpdir(), 'coach-test-'));

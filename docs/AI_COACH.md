@@ -140,6 +140,8 @@ unprivileged, and which account is being spent.
 > key is shared by every profile under the daily limits. A *personal* credential — a Claude Code
 > setup token — binds to the first profile that spends it and **every other profile is refused**,
 > by design: that is the right behaviour when one person's personal subscription is behind it.
+> If each person should bring their own account instead, the admin switches the mode to
+> **profile** and every credential lives — and pays — on its own.
 
 ### A debrief of one workout
 
@@ -176,6 +178,22 @@ to be. The Coach spends a real provider account, and there are two shapes:
 | **instance** | one account, stored encrypted in `coach.json` | the single-profile instance most people run |
 | **profile** | one account per profile, in its own `coach-auth-<uid>.json` | anything with more than one profile |
 
+The admin picks the mode in **Settings → Admin → AI Coach → Whose account pays**, and the two are
+exclusive: there is no fallback from a profile's own account to the instance's, because a silent
+fallback is exactly the shape where somebody's subscription ends up paying for somebody else.
+Switching modes resets the daily limits to that mode's defaults — 10/profile/day for instance,
+no limit for profile — and the card renders the new values rather than resetting them quietly.
+
+**Profile mode is provider-per-profile too.** Each person opens **Settings → AI Coach** (or is
+offered the account screen the first time they open the Coach) and chooses Anthropic, OpenAI,
+Gemini or any OpenAI-compatible endpoint: their provider, their model, their endpoint, their key.
+Two people on the same server can run two different providers side by side. The key is
+write-only: it is encrypted on the way in, no route returns it, and the admin card shows a count
+of connected profiles — never a key, never a provider per person. A profile that has not
+connected is told to connect, not that the instance is off. The instance-wide daily cap belongs
+to instance mode; with everybody on their own account there is nothing of the owner's to bound,
+though the admin can still set a per-profile limit if the group wants one.
+
 In instance mode it depends on what kind of credential was pasted:
 
 - **An API key** (Anthropic, OpenAI, Gemini, an OpenAI-compatible endpoint) is shared by every
@@ -199,7 +217,9 @@ available, and refuses the shape that does.
 A profile credential lives in its own file, `0600`, never in `state-<uid>.json` — profile state
 syncs across devices and travels in the user's JSON export, and a credential that rides along in
 a backup is the same class of mistake as a token inside the directory the README tells you to
-archive.
+archive. The record also names the provider, the model and, for a compatible endpoint, the base
+URL the profile chose: those are what make the mode provider-per-profile rather than
+key-per-profile.
 
 ## What actually leaves your server
 
