@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { api } from '../lib/api.js'
 import { exOr } from '../lib/exercises.js'
 import { ACCENTS, fmtNum } from '../lib/format.js'
-import { muscleGroupsOf, MUSCLES } from '../lib/muscles.js'
+import { muscleGroupsOf, musclesOf, MUSCLES } from '../lib/muscles.js'
 import { Button, Segmented, Switch } from '../components/ui.jsx'
 import LineChart from '../components/LineChart.jsx'
 import TerritoryMap, { MUSCLE_ES } from '../components/TerritoryMap.jsx'
@@ -168,30 +168,39 @@ export default function Friends() {
         ))}
       </div>}
 
-      {territories.list.length > 0 && <div className="card">
+      {(territories.list.length > 0 || data.participantCount > 0) && <div className="card">
         <h2>Mapa de territorios</h2>
-        <div className="dim small" style={{ marginBottom: 8, lineHeight: 1.4 }}>
-          Cada músculo lo pinta su dueño: mejor ×peso promedio en los ejercicios de ese músculo.
-          Los grises todavía no tienen datos compartidos.
-        </div>
-        <TerritoryMap owners={territories.owners} onMuscle={slug => setTSlug(s => (s === slug ? null : slug))} selected={tSlug} />
-        <div className="fx-legend">
-          {terOwners.map(p => (
-            <span className="fx-legend-i" key={p.uid}>
-              <span className="fx-dot" style={{ background: ACCENTS[p.color] }} />{p.name}
-            </span>
-          ))}
-        </div>
-        <div className="dim small" style={{ marginTop: 8, textAlign: 'center', lineHeight: 1.4 }}>
-          {tSlug
-            ? (terSel
-              ? <><b style={{ color: 'var(--label)', fontWeight: 600 }}>{MUSCLE_ES[tSlug]}</b> · {terSel.name} · ×{fmtNum(terSel.avg)}{terSel.recent ? ' · 🏴 esta semana' : ''}</>
-              : `${MUSCLE_ES[tSlug]} · sin dueño todavía`)
-            : `Tocá un músculo para ver el dueño${terCounts.length ? ' · ' + terCounts.join(' · ') : ''}`}
-        </div>
-        {terConq.length > 0 && <div className="dim small" style={{ marginTop: 4, textAlign: 'center' }}>
-          🏴 Esta semana: {terConq.map(t => `${MUSCLE_ES[t.slug]} (${t.name.split(' ')[0]})`).join(' · ')}
-        </div>}
+        {territories.list.length > 0 ? <>
+          <div className="dim small" style={{ marginBottom: 8, lineHeight: 1.4 }}>
+            Cada músculo lo pinta su dueño: mejor ×peso entre sus ejercicios, priorizando el
+            trabajo directo. Los grises todavía no tienen datos compartidos.
+          </div>
+          <TerritoryMap owners={territories.owners} onMuscle={slug => setTSlug(s => (s === slug ? null : slug))} selected={tSlug} />
+          <div className="fx-legend">
+            {terOwners.map(p => (
+              <span className="fx-legend-i" key={p.uid}>
+                <span className="fx-dot" style={{ background: ACCENTS[p.color] }} />{p.name}
+              </span>
+            ))}
+          </div>
+          <div className="dim small" style={{ marginTop: 8, textAlign: 'center', lineHeight: 1.4 }}>
+            {tSlug
+              ? (terSel
+                ? <><b style={{ color: 'var(--label)', fontWeight: 600 }}>{MUSCLE_ES[tSlug]}</b> · {terSel.name} · ×{fmtNum(terSel.avg)}{terSel.direct ? '' : ' · sin trabajo directo'}{terSel.recent ? ' · 🏴 esta semana' : ''}</>
+                : `${MUSCLE_ES[tSlug]} · sin dueño todavía`)
+              : `Tocá un músculo para ver el dueño${terCounts.length ? ' · ' + terCounts.join(' · ') : ''}`}
+          </div>
+          {terConq.length > 0 && <div className="dim small" style={{ marginTop: 4, textAlign: 'center' }}>
+            🏴 Esta semana: {terConq.map(t => `${MUSCLE_ES[t.slug]} (${t.name.split(' ')[0]})`).join(' · ')}
+          </div>}
+        </> : <>
+          <TerritoryMap owners={{}} />
+          <div className="dim small" style={{ marginTop: 10, textAlign: 'center', lineHeight: 1.5 }}>
+            El mapa se activa cuando haya <b style={{ color: 'var(--label)', fontWeight: 600 }}>al menos 2 personas</b> en el ranking
+            con datos en los mismos ejercicios.
+            {data.participantCount >= 2 && <><br />Entrenen los mismos ejercicios y los músculos se van a ir pintando 🏴</>}
+          </div>
+        </>}
       </div>}
 
       {data.exercises.length > 0 && <>
@@ -399,37 +408,47 @@ function RankList({ data, metric, norm, tintOf }) {
 
 /* ============================ datos derivados de la vista ============================ */
 
-/** Territorios: dueño de cada músculo = mejor ×peso promedio entre los ejercicios que lo
- *  entrenan (con al menos dos contendientes; si no, el músculo queda gris). Se calcula acá
- *  porque el mapeo ejercicio→músculos vive en las librerías del frontend, no en el api. */
+/** Territorios: dueño de cada músculo = mejor ×peso promedio **entre los ejercicios que lo
+ *  trabajan directo** (peso ≥ 0.5 en `musclesOf`); si nadie lo hace directo, cae al pozo de
+ *  los secundarios y se marca `direct:false`. Con menos de dos contendientes, el músculo queda
+ *  gris. Se calcula acá porque el mapeo ejercicio→músculos vive en las librerías del frontend. */
 function territoryOf(data) {
   const byUid = new Map(data.participants.map(p => [p.uid, p]))
   const bySlug = new Map()
   for (const ex of data.exercises) {
     const e = exOr(ex.id)
     if (!e) continue
+    const weights = musclesOf(e)
     for (const slug of muscleGroupsOf(e)) {
       let m = bySlug.get(slug)
-      if (!m) { m = new Map(); bySlug.set(slug, m) }
-      for (const en of ex.entries) {
-        if (en.rel == null) continue
-        const cur = m.get(en.uid) || { sum: 0, n: 0, best: 0, d: null }
+      if (!m) { m = { all: new Map(), primary: new Map() }; bySlug.set(slug, m) }
+      const direct = (weights[slug] || 0) >= 0.5
+      const bump = (map, en) => {
+        const cur = map.get(en.uid) || { sum: 0, n: 0, best: 0, d: null }
         cur.sum += en.rel; cur.n++
         if (en.rel > cur.best) { cur.best = en.rel; cur.d = en.d }
-        m.set(en.uid, cur)
+        map.set(en.uid, cur)
+      }
+      for (const en of ex.entries) {
+        if (en.rel == null) continue
+        bump(m.all, en)
+        if (direct) bump(m.primary, en)
       }
     }
   }
   const owners = {}
   for (const [slug, m] of bySlug) {
-    const cands = [...m.entries()].map(([uid, v]) => ({ uid, avg: v.sum / v.n, best: v.best, d: v.d }))
-    if (cands.length < 2) continue
-    cands.sort((a, b) => b.avg - a.avg || b.best - a.best)
-    const w = cands[0]
+    const toList = map => [...map.entries()].map(([uid, v]) => ({ uid, avg: v.sum / v.n, best: v.best, d: v.d }))
+    const listAll = toList(m.all)
+    if (listAll.length < 2) continue
+    const listPrimary = toList(m.primary)
+    const pool = (listPrimary.length ? listPrimary : listAll).sort((a, b) => b.avg - a.avg || b.best - a.best)
+    const w = pool[0]
     const p = byUid.get(w.uid)
     owners[slug] = {
       uid: w.uid, name: p?.name || w.uid, color: ACCENTS[p?.color] || 'var(--label-3)',
       avg: Math.round(w.avg * 100) / 100, d: w.d, recent: !!(w.d && w.d >= data.week.start),
+      direct: listPrimary.length > 0,
     }
   }
   return { owners, list: MUSCLES.filter(s => owners[s]).map(s => ({ slug: s, ...owners[s] })) }

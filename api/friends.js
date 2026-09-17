@@ -402,7 +402,9 @@ export function buildRanking({ users, states }, config, now = new Date(), norm =
       })
     }
   }
-  const floor = Math.min(Math.max(1, config.minParticipantsPerExercise || 1), Math.max(1, participants.length))
+  // Estricto: con `minParticipantsPerExercise: 2`, una sección con un solo perfil queda vacía
+  // (pedido de Alex: «Por ejercicio» muestra solo lo compartido por ambos/dos personas).
+  const floor = Math.max(1, config.minParticipantsPerExercise || 1)
   // Recorte opcional de «Por ejercicio»: los N más compartidos (0/ausente = la lista completa).
   const maxExercises = Math.max(0, Math.floor(Number(config.maxExercises) || 0))
   const exercises = [...exMap.entries()]
