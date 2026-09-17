@@ -20,6 +20,7 @@ import { startWarmup } from './coach/warmup.js';
 import { dayReminderPush, restTimerPush, testPush } from './push-messages.js';
 import { verifyError } from './verify-error.js';
 import { friendsRanking, setFriendShare, isInstanceOwner } from './friends.js';
+import { socialData, addPost, deletePost, reactToPost, publishRoutine, unpublishRoutine } from './social.js';
 
 const PORT = +(process.env.PORT || 3000);
 const DATA = process.env.DATA_DIR || '/data';
@@ -690,6 +691,51 @@ const routes = {
     const body = await readBody(req);
     try { setFriendShare(DATA, String(body.uid || ''), false); json(res, 200, { ok: true }); }
     catch (e) { json(res, 400, { error: String(e.message || e) }); }
+  },
+
+  // Social del grupo (feature local): feed de sesiones + rutinas publicadas. Mismas reglas de
+  // consentimiento que el ranking (resolveListed); solo viajan snapshots agregados.
+  'GET /api/social': async (req, res) => {
+    const user = readSession(req);
+    if (!user) return json(res, 401, { error: 'not signed in' });
+    try { json(res, 200, socialData(DATA, user.id)); }
+    catch (e) { console.error('social', e); json(res, 500, { error: 'server error' }); }
+  },
+
+  'POST /api/social/post': async (req, res) => {
+    const user = readSession(req);
+    if (!user) return json(res, 401, { error: 'not signed in' });
+    const body = await readBody(req);
+    try { json(res, 200, { ok: true, post: addPost(DATA, user.id, body.post) }); }
+    catch (e) { json(res, e.status === 403 ? 403 : 400, { error: String(e.message || e) }); }
+  },
+
+  'POST /api/social/post/delete': async (req, res) => {
+    const user = readSession(req);
+    if (!user) return json(res, 401, { error: 'not signed in' });
+    const body = await readBody(req);
+    try { json(res, 200, deletePost(DATA, user.id, String(body.id || ''))); }
+    catch (e) { json(res, 400, { error: String(e.message || e) }); }
+  },
+
+  'POST /api/social/react': async (req, res) => {
+    const user = readSession(req);
+    if (!user) return json(res, 401, { error: 'not signed in' });
+    const body = await readBody(req);
+    try { json(res, 200, reactToPost(DATA, user.id, String(body.id || ''), String(body.emoji || ''))); }
+    catch (e) { json(res, e.status === 403 ? 403 : 400, { error: String(e.message || e) }); }
+  },
+
+  'POST /api/social/routine': async (req, res) => {
+    const user = readSession(req);
+    if (!user) return json(res, 401, { error: 'not signed in' });
+    const body = await readBody(req);
+    try {
+      const out = body.remove
+        ? unpublishRoutine(DATA, user.id, String(body.key || ''))
+        : { ok: true, routine: publishRoutine(DATA, user.id, body.routine) };
+      json(res, 200, out);
+    } catch (e) { json(res, e.status === 403 ? 403 : 400, { error: String(e.message || e) }); }
   },
 
   'POST /api/register/options': async (req, res) => {

@@ -222,7 +222,7 @@ const customName = (id, S) => { const c = (S.customEx || []).find(e => e.id === 
  *   · share:false en la config → excluido por el dueño (manda).
  *   · friends.share === false en el estado → el perfil se excluye a sí mismo (manda).
  *   · friends.share === true en el estado → auto-incluido con su nombre de perfil. */
-function resolveListed(config, states, users) {
+export function resolveListed(config, states, users) {
   const cfgByUid = new Map((config.participants || []).filter(p => p && p.uid).map(p => [p.uid, p]))
   const listed = []
   for (const p of cfgByUid.values()) {
@@ -494,7 +494,7 @@ function streakOf(S, ws) {
 }
 
 const configPathFor = dataDir => process.env.FRIENDS_CONFIG || path.join(dataDir, 'friends.json')
-function readConfig(dataDir) {
+export function readConfig(dataDir) {
   try { return JSON.parse(fs.readFileSync(configPathFor(dataDir), 'utf8')) } catch { return {} }
 }
 

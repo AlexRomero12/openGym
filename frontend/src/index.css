@@ -1077,6 +1077,18 @@ body.chips-dragging *{cursor:inherit}
 .tm.tappable .tm-m{cursor:pointer}
 .fx-legend{display:flex;flex-wrap:wrap;gap:4px 12px;justify-content:center;margin-top:8px}
 .fx-legend-i{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--label-2)}
+/* --- Amigos · Actividad (feed) y Rutinas --- */
+.feed-hd{display:flex;align-items:center;gap:10px}
+.feed-stats{display:flex;gap:16px;margin-top:8px;font-size:13px;color:var(--label-2)}
+.feed-stats b{color:var(--label);font-weight:600;font-variant-numeric:tabular-nums}
+.feed-top{margin-top:8px;display:flex;flex-direction:column;gap:3px}
+.feed-set{display:flex;justify-content:space-between;gap:10px;font-size:14px}
+.feed-set-n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--label)}
+.feed-set-v{flex:none;color:var(--label-2);font-variant-numeric:tabular-nums}
+.rx-row{display:flex;gap:6px;margin-top:10px}
+.rx{border-radius:99px;background:var(--surface-2);padding:4px 11px;font-size:13px;color:var(--label-2);transition:background var(--fast)}
+.rx.on{background:var(--acc-soft);color:var(--acc)}
+.rx:active{background:var(--surface-3)}
 /* La tabla de semanas se desliza en horizontal en vez de salirse de la tarjeta. */
 .tbl-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:2px}
 

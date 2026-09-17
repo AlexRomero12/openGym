@@ -23,6 +23,7 @@ import { exerciseMuscleSnapshot, loadOfWorkouts, MUSCLES, MUSCLE_NAME, normalize
 import { parseImport, mergeImport } from './lib/import-csv.js'
 import { importHevyData, HevyApiError, HEVY_DEV_SETTINGS, mergeHevyRoutines } from './lib/import-hevy.js'
 import { buildPlanBundle, parsePlan, mergePlan, printPlan, planPrintHTML } from './lib/plan-share.js'
+import { buildSessionPost, shareSession } from './lib/social-post.js'
 import { estimate1RM, best1RM, is1RMRecord, REP_CAP } from './lib/onerm.js'
 import { exerciseHistory } from './lib/exercise-history.js'
 import { nextPrescription, applyPrescription, policyFor, defaultIncrement, POLICIES_FOR, POLICY_NAME, POLICY_DESC, MAX_BW_SETS, weightIncrement } from './lib/progression.js'
@@ -2070,6 +2071,19 @@ export const workoutCompleteSheet = () => ui().openSheet(close => <WorkoutComple
 
 function FinishSummary({ w, prs, e1prs = [], close }) {
   const st = useStore(s => s.S)
+  const [shared, setShared] = useState(false)
+  const [sharing, setSharing] = useState(false)
+  // Social del grupo (fork local): publicar el entreno en Actividad.
+  const share = async () => {
+    setSharing(true)
+    try {
+      await shareSession(buildSessionPost(st, w, { prs, e1prs }))
+      setShared(true)
+      useUI.getState().toast('Compartido en Actividad 🎉')
+    } catch (e) {
+      useUI.getState().toast(e.status === 403 ? 'Prendé «Aparecer en el ranking» para compartir' : 'No se pudo compartir')
+    } finally { setSharing(false) }
+  }
   return <div style={{ textAlign: 'center', padding: '8px 0' }}>
     <div style={{ fontSize: 44, display: 'flex', justifyContent: 'center', color: 'var(--acc)' }}><Icon name="trophy" /></div>
     <h3 style={{ margin: '8px 0' }}>{t('Workout complete!')}</h3>
@@ -2086,6 +2100,8 @@ function FinishSummary({ w, prs, e1prs = [], close }) {
     <h4 className="sec" style={{ textAlign: 'left' }}>{t('What you just trained')}</h4>
     <BodyMap load={loadOfWorkouts([w])} body={st.body} />
     <div style={{ height: 14 }} />
+    <Button variant="tinted" icon="upload" disabled={sharing || shared} onClick={share}>{shared ? 'Compartido ✓' : 'Compartir con el grupo'}</Button>
+    <div style={{ height: 8 }} />
     <Button variant="primary" onClick={() => { close(); nav('/home') }}>{t('Nice!')}</Button>
   </div>
 }
@@ -2135,6 +2151,13 @@ function doFinishWorkout() {
   })
   useStore.getState().autoBackupNow()
   useUI.getState().stopRest()
+  // Social del grupo (fork local): auto-publicación opt-in al terminar (los backfills no).
+  const fresh = S()
+  if (!past && fresh.social?.autoShare) {
+    shareSession(buildSessionPost(fresh, w, { prs, e1prs }))
+      .then(() => useUI.getState().toast('Compartido automáticamente en Actividad 🎉'))
+      .catch(() => { /* sin consentimiento o sin red: se comparte a mano desde el resumen */ })
+  }
   beep(snd(), 880, 0.15); beep(snd(), 1100, 0.15, 0.18); beep(snd(), 1320, 0.3, 0.36)
   ui().openSheet(close => <FinishSummary w={w} prs={prs} e1prs={e1prs} close={close} />, { kind: 'center', locked: true })
 }

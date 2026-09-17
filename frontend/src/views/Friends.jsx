@@ -4,13 +4,18 @@
 // (friends.json). Textos literales en español a propósito: la única usuaria es Alex.
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../lib/api.js'
-import { exOr } from '../lib/exercises.js'
-import { ACCENTS, fmtNum } from '../lib/format.js'
+import { EXIDX, exOr } from '../lib/exercises.js'
+import { ACCENTS, fmtNum, fmtVol } from '../lib/format.js'
 import { muscleGroupsOf, musclesOf, MUSCLES } from '../lib/muscles.js'
 import { Button, Segmented, Switch } from '../components/ui.jsx'
 import LineChart from '../components/LineChart.jsx'
 import TerritoryMap, { MUSCLE_ES } from '../components/TerritoryMap.jsx'
+import Icon, { ICON_NAMES } from '../components/Icon.jsx'
+import { glyphOf } from '../lib/glyphs.js'
+import { mergePlan } from '../lib/plan-share.js'
+import { confirmSheet } from '../sheets.jsx'
 import { useStore } from '../store/useStore.js'
+import { useUI } from '../store/useUI.js'
 import { exerciseNameFor } from '../lib/i18n.js'
 
 const cap = s => String(s || '').replace(/(^|[\s(\-/])(\p{Ll})/gu, (m, pre, ch) => pre + ch.toUpperCase())
@@ -46,6 +51,8 @@ export default function Friends() {
   const [busy, setBusy] = useState(null)
   const [openEx, setOpenEx] = useState(null)
   const [tSlug, setTSlug] = useState(null)   // músculo tocado en el mapa de territorios
+  const [view, setView] = useState('ranking') // Ranking · Actividad · Rutinas
+  const [social, setSocial] = useState(null)  // feed + rutinas publicadas (api/social.js)
 
   const load = useCallback(async () => {
     try {
@@ -60,6 +67,13 @@ export default function Friends() {
   }, [norm])
 
   useEffect(() => { load() }, [load])
+
+  // Social del grupo (feed + rutinas): solo perfiles con sesión.
+  const loadSocial = useCallback(async () => {
+    if (!user || isGuest) return
+    try { setSocial(await api('/api/social')) } catch { /* el feed avisa con su propio estado */ }
+  }, [user, isGuest])
+  useEffect(() => { loadSocial() }, [loadSocial])
 
   // Opt-in propio: se guarda en el perfil (sincroniza como cualquier ajuste de la app).
   const sharing = !!S.friends?.share
@@ -114,10 +128,18 @@ export default function Friends() {
       <Switch checked={sharing} onChange={toggleShare} />
     </div>}
 
+    {user && !isGuest && <div className="card" style={{ padding: 10, marginBottom: 12 }}>
+      <Segmented value={view} onChange={setView} options={[
+        { value: 'ranking', label: 'Ranking' },
+        { value: 'feed', label: 'Actividad' },
+        { value: 'routines', label: 'Rutinas' },
+      ]} />
+    </div>}
+
     {!data && !error && <div className="card dim" style={{ textAlign: 'center', padding: 24 }}>Cargando…</div>}
     {error && <div className="card dim" style={{ padding: 24 }}>{error}</div>}
 
-    {data && <>
+    {view === 'ranking' && data && <>
       <div className="card">
         <Segmented className="seg-range" value={metric} onChange={setMetric} options={[
           { value: 'volume', label: 'Volumen' },
@@ -354,6 +376,14 @@ export default function Friends() {
           : 'El 1RM por ejercicio es una estimación (Epley), no una marca real.'}
       </div>
     </>}
+
+    {view === 'feed' && (user && !isGuest
+      ? <Feed social={social} byUid={byUid} tintOf={tintOf} me={me} sharing={sharing} onChanged={loadSocial} />
+      : <div className="card dim" style={{ padding: 24 }}>Ingresá con tu perfil para ver la actividad del grupo.</div>)}
+
+    {view === 'routines' && (user && !isGuest
+      ? <Routines social={social} byUid={byUid} tintOf={tintOf} me={me} S={S} update={update} onChanged={loadSocial} sharing={sharing} />
+      : <div className="card dim" style={{ padding: 24 }}>Ingresá con tu perfil para ver las rutinas del grupo.</div>)}
   </>
 }
 
@@ -404,6 +434,185 @@ function RankList({ data, metric, norm, tintOf }) {
       <span className="lrow-v" style={{ color: i === 0 ? 'var(--acc)' : undefined, fontWeight: 600 }}>{value}</span>
     </div>
   })
+}
+
+/* ============================ social: actividad y rutinas ============================ */
+
+const timeAgo = iso => {
+  const t = Date.parse(iso)
+  if (!Number.isFinite(t)) return ''
+  const min = Math.round((Date.now() - t) / 60000)
+  if (min < 1) return 'ahora'
+  if (min < 60) return `hace ${min} min`
+  const h = Math.round(min / 60)
+  if (h < 24) return `hace ${h} h`
+  const d = Math.round(h / 24)
+  if (d === 1) return 'ayer'
+  if (d < 7) return `hace ${d} días`
+  return new Date(t).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })
+}
+
+const RX = ['🔥', '👏', '💪']
+
+// Feed del grupo: publicaciones de sesiones terminadas (snapshot: nunca entrenos crudos ni pesos).
+function Feed({ social, byUid, tintOf, me, sharing, onChanged }) {
+  const autoShare = useStore(s => s.S.social?.autoShare)
+  const update = useStore(s => s.update)
+  const toast = useUI(s => s.toast)
+  const [err, setErr] = useState(null)
+
+  const act = async (path, body) => {
+    try { await api(path, { method: 'POST', body: JSON.stringify(body) }); await onChanged(); setErr(null) }
+    catch (e) { setErr('No se pudo: ' + e.message) }
+  }
+  const remove = id => confirmSheet({
+    title: '¿Borrar esta publicación?',
+    message: 'Se quita de Actividad para todos.',
+    confirmText: 'Borrar', danger: true,
+    onConfirm: () => {
+      api('/api/social/post/delete', { method: 'POST', body: JSON.stringify({ id }) })
+        .then(onChanged).then(() => toast('Publicación borrada'))
+        .catch(e => setErr('No se pudo: ' + e.message))
+    },
+  })
+
+  if (!social) return <div className="card dim" style={{ padding: 24 }}>Cargando…</div>
+
+  return <>
+    <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div className="lrow-t">Compartir automáticamente</div>
+        <div className="lrow-s">
+          {sharing ? 'Cada entreno que termines se publica solo acá.' : 'Prendé «Aparecer en el ranking» para participar del feed.'}
+        </div>
+      </div>
+      <Switch checked={!!autoShare} disabled={!sharing} onChange={v => update(s => { s.social = { ...(s.social || {}), autoShare: v } })} />
+    </div>
+
+    {social.posts.length === 0 && <div className="card dim" style={{ padding: 20 }}>
+      Todavía no hay actividad. Terminá un entreno y compartilo 💪
+    </div>}
+
+    {social.posts.map(p => {
+      const author = byUid.get(p.uid)
+      const mine = me && p.uid === me
+      const rEmoji = p.routine && !ICON_NAMES.includes(p.routine.emoji) ? p.routine.emoji : ''
+      const rname = p.routine ? [rEmoji, p.routine.name].filter(Boolean).join(' ') : ''
+      return <div className="card" key={p.id}>
+        <div className="feed-hd">
+          <span className="lrow-i" style={tintOf(p.uid)}>{author?.emoji || '💪'}</span>
+          <div className="lrow-m">
+            <div className="lrow-t">{author?.name || p.uid}</div>
+            <div className="lrow-s">{timeAgo(p.created)}{rname ? ' · ' + rname : ''}</div>
+          </div>
+          {mine && <Button size="sm" variant="ghost" onClick={() => remove(p.id)}>Borrar</Button>}
+        </div>
+        <div className="feed-stats">
+          <span><b>{p.minutes}</b> min</span>
+          {p.volumeKg > 0 && <span><b>{fmtVol(p.volumeKg, 'kg')}</b></span>}
+          <span><b>{p.sets}</b> series</span>
+        </div>
+        {p.top.length > 0 && <div className="feed-top">
+          {p.top.slice(0, 4).map(s => (
+            <div className="feed-set" key={s.id}>
+              <span className="feed-set-n">{exLabel(s.id, s.n)}</span>
+              <span className="feed-set-v">{fmtNum(s.w)} kg × {s.r}</span>
+            </div>
+          ))}
+          {p.top.length > 4 && <div className="dim small" style={{ marginTop: 2 }}>+{p.top.length - 4} más</div>}
+        </div>}
+        {p.prs.length > 0 && <div className="small" style={{ color: 'var(--acc)', marginTop: 8 }}>
+          🎯 {p.prs.length} PR{p.prs.length > 1 ? 's' : ''}: {p.prs.slice(0, 3).map(id => exLabel(id)).join(' · ')}{p.prs.length > 3 ? ' …' : ''}
+        </div>}
+        <div className="rx-row">
+          {RX.map(e => (
+            <button key={e} className={'rx' + (p.mine === e ? ' on' : '')} onClick={() => act('/api/social/react', { id: p.id, emoji: e })}>
+              {e}{p.counts[e] ? ' ' + p.counts[e] : ''}
+            </button>
+          ))}
+        </div>
+      </div>
+    })}
+    {err && <div className="dim small" style={{ textAlign: 'center', marginTop: 6 }}>{err}</div>}
+  </>
+}
+
+// Rutinas del grupo: publicar/actualizar/despublicar las mías y copiar las de los demás.
+function Routines({ social, byUid, tintOf, me, S, update, onChanged, sharing }) {
+  const toast = useUI(s => s.toast)
+  const [busy, setBusy] = useState(null)
+  const [err, setErr] = useState(null)
+  if (!social) return <div className="card dim" style={{ padding: 24 }}>Cargando…</div>
+
+  const published = (social.routines || []).filter(r => r.uid === me)
+  const publishedFor = rid => published.find(p => p.rid === rid) || null
+  const myRoutines = (S.routines || []).filter(r => r.ex && r.ex.length)
+  const others = (social.routines || []).filter(r => r.uid !== me)
+
+  const publish = async r => {
+    setBusy(r.id)
+    try {
+      const usedCustom = new Set((r.ex || []).map(e => e.id).filter(id => EXIDX[id]?.custom))
+      const customEx = (S.customEx || []).filter(c => usedCustom.has(c.id)).map(c => ({ id: c.id, n: c.n, bp: c.bp, ...(c.desc ? { desc: c.desc } : {}) }))
+      await api('/api/social/routine', { method: 'POST', body: JSON.stringify({
+        routine: { key: publishedFor(r.id)?.key, rid: r.id, name: r.name, emoji: r.emoji, ex: r.ex, customEx },
+      }) })
+      await onChanged()
+      toast('Rutina publicada para el grupo ✓')
+    } catch (e) { setErr('No se pudo publicar: ' + e.message) }
+    finally { setBusy(null) }
+  }
+  const unpublish = async r => {
+    const pub = publishedFor(r.id)
+    if (!pub) return
+    setBusy(r.id)
+    try { await api('/api/social/routine', { method: 'POST', body: JSON.stringify({ remove: true, key: pub.key }) }); await onChanged() }
+    catch (e) { setErr('No se pudo quitar: ' + e.message) }
+    finally { setBusy(null) }
+  }
+  const copy = r => {
+    update(s => mergePlan(s, { routines: [{ ...r, id: r.key }], customEx: r.customEx || [] }))
+    toast('Rutina copiada a tu plan ✓')
+  }
+
+  return <>
+    <div className="card">
+      <h2>Mis rutinas</h2>
+      {!sharing && <div className="dim small" style={{ marginBottom: 6, lineHeight: 1.4 }}>
+        Prendé «Aparecer en el ranking» para publicar rutinas para el grupo.
+      </div>}
+      {myRoutines.length === 0 && <div className="dim small">Todavía no tenés rutinas con ejercicios.</div>}
+      {myRoutines.map(r => {
+        const pub = publishedFor(r.id)
+        return <div className="lrow" key={r.id}>
+          <span className="lrow-i"><Icon name={glyphOf(r.emoji)} /></span>
+          <div className="lrow-m">
+            <div className="lrow-t">{r.name || 'Rutina'}</div>
+            <div className="lrow-s">{(r.ex || []).length} ejercicios{pub ? ' · publicada' : ''}</div>
+          </div>
+          <Button size="sm" variant={pub ? 'ghost' : 'tinted'} disabled={!sharing || busy === r.id} onClick={() => publish(r)}>{pub ? 'Actualizar' : 'Publicar'}</Button>
+          {pub && <Button size="sm" variant="ghost" disabled={busy === r.id} onClick={() => unpublish(r)}>Quitar</Button>}
+        </div>
+      })}
+    </div>
+
+    <div className="card">
+      <h2>Rutinas del grupo</h2>
+      {others.length === 0 && <div className="dim small">Todavía no hay rutinas compartidas por otros.</div>}
+      {others.map(r => {
+        const author = byUid.get(r.uid)
+        return <div className="lrow" key={r.key}>
+          <span className="lrow-i" style={tintOf(r.uid)}><Icon name={glyphOf(r.emoji)} /></span>
+          <div className="lrow-m">
+            <div className="lrow-t">{r.name}</div>
+            <div className="lrow-s">{author?.name || r.uid} · {r.ex.length} ejercicios · {timeAgo(r.updated)}</div>
+          </div>
+          <Button size="sm" variant="tinted" onClick={() => copy(r)}>Copiar</Button>
+        </div>
+      })}
+    </div>
+    {err && <div className="dim small" style={{ textAlign: 'center', marginTop: 6 }}>{err}</div>}
+  </>
 }
 
 /* ============================ datos derivados de la vista ============================ */
