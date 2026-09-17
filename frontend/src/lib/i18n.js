@@ -6,8 +6,8 @@
 import { useSyncExternalStore } from 'react'
 import {
   LANGS, INSTR_LANGS, EXERCISE_NAME_LANGS, DATE_LOCALES, DERIVED_LOCALES,
-  getLang, dateLocale, t, instrFor, exerciseNameFor, exerciseNameSearchText, getVersion,
-  baseLang, derivePack, _setLangState
+  getLang, dateLocale, t, instrFor, exerciseNameFor, exerciseNameSearchText, sentenceCase,
+  getVersion, baseLang, derivePack, _setLangState
 } from './i18n-core.js'
 
 export {
