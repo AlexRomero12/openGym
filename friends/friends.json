@@ -1,0 +1,16 @@
+{
+  "title": "Ranking openGym",
+  "subtitle": "Semana a semana, entre amigos",
+  "accent": "lime",
+  "theme": "dark",
+  "unit": "kg",
+  "weekStart": 1,
+  "historyWeeks": 4,
+  "minParticipantsPerExercise": 2,
+  "participants": [
+    { "uid": "OWxgIarRlqNt-EKC", "name": "Alex", "emoji": "🏋️", "share": true },
+    { "uid": "demo-ana", "name": "Ana (demo)", "emoji": "🔥", "share": true, "demo": true },
+    { "uid": "Oq_kUi9LkMbIKiKZ", "name": "Amigo 1", "emoji": "🏃", "share": false },
+    { "uid": "CQ2az9IdJePwZRcs", "name": "Amigo 2", "emoji": "🚴", "share": false }
+  ]
+}

@@ -1,0 +1,23 @@
+# Panel "Amigos" de openGym — LAN.
+#
+#   docker compose -f friends/docker-compose.yml up -d --build
+#
+# El contexto de build es la raíz del repo (..). Los datos se montan en SOLO LECTURA:
+# este servicio nunca escribe en la instancia.
+name: opengym-friends
+
+services:
+  friends:
+    build:
+      context: ..
+      dockerfile: friends/Dockerfile
+    image: opengym-friends:latest
+    restart: unless-stopped
+    ports:
+      - "${FRIENDS_PORT:-8770}:8770"
+    environment:
+      - OPENGYM_DATA=/app/data
+      - PORT=8770
+    volumes:
+      - ../data:/app/data:ro
+      - ./friends.json:/app/friends/friends.json:ro

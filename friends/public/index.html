@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="es" data-theme="dark" data-accent="lime">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark light" />
+    <meta name="theme-color" content="#000000" />
+    <title>Ranking openGym</title>
+    <link rel="stylesheet" href="/friends.css" />
+  </head>
+  <body>
+    <div id="app">
+      <div class="hdr">
+        <div class="grow">
+          <h1 id="title">Ranking</h1>
+          <div class="sub" id="subtitle">Cargando…</div>
+        </div>
+        <button class="iconbtn" id="refresh" title="Actualizar" aria-label="Actualizar"><span class="glyph">↻</span></button>
+        <button class="iconbtn" id="theme" title="Tema claro/oscuro" aria-label="Tema"><span class="glyph" id="themeGlyph">◐</span></button>
+      </div>
+
+      <div class="sect" id="rankSect">
+        <span class="sect-t" id="rankTitle">Esta semana</span>
+        <div class="seg" id="metricSeg" style="--n:3;--i:0" hidden>
+          <span class="seg-sel"></span>
+          <button data-metric="volume" class="on">Volumen</button>
+          <button data-metric="compliance">Cumplimiento</button>
+          <button data-metric="streak">Racha</button>
+        </div>
+        <div class="seg norm" id="normSeg" style="--n:2;--i:0" hidden>
+          <span class="seg-sel"></span>
+          <button data-norm="rel" class="on">× peso</button>
+          <button data-norm="abs">kg</button>
+        </div>
+        <div class="sect-b" id="rankList" style="margin-top:8px"></div>
+        <div class="sect-f" id="rankFoot"></div>
+      </div>
+
+      <div class="sect" id="imprSect" hidden>
+        <span class="sect-t">Mejora de la semana</span>
+        <div class="sect-b" id="imprList"></div>
+        <div class="sect-f">1RM estimado de esta semana contra tu mejor anterior. Un ejercicio cuenta cuando lo superás.</div>
+      </div>
+
+      <div class="sect" id="exSect" hidden>
+        <span class="sect-t">Por ejercicio · mejor 1RM estimado (Epley)</span>
+        <div id="exList"></div>
+        <div class="sect-f">1RM estimado (Epley): peso × (1 + reps ÷ 30), sin calentamiento. Solo entre quienes lo entrenan.</div>
+      </div>
+
+      <div class="sect" id="histSect" hidden>
+        <span class="sect-t">Últimas semanas</span>
+        <div class="sect-b hist-scroll">
+          <table class="hist" id="histTable"></table>
+        </div>
+        <div class="sect-f" id="histFoot"></div>
+      </div>
+
+      <p class="t-cap dim foot-note" id="footNote"></p>
+    </div>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,11 @@
+{
+  "name": "opengym-friends",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Panel externo de ranking (Amigos) para openGym — Camino A. Lee los state-*.json de la instancia en solo lectura y sirve una página con la estética de openGym.",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/ranking.test.js"
+  }
+}
