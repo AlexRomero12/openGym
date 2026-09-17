@@ -33,6 +33,7 @@ import Stats from './views/Stats.jsx'
 import History from './views/History.jsx'
 import Library from './views/Library.jsx'
 import Muscles from './views/Muscles.jsx'
+import Friends from './views/Friends.jsx'
 import Settings from './views/Settings.jsx'
 import Admin from './views/Admin.jsx'
 import CoachChat from './views/CoachChat.jsx'
@@ -144,6 +145,8 @@ function Shell() {
               <Route path="/plan/r/:id" element={<RoutineEdit />} />
               <Route path="/workout" element={<Workout />} />
               <Route path="/stats" element={<Stats />} />
+              {/* Ranking «Amigos» (feature local): perfiles de la instancia que comparten. */}
+              <Route path="/friends" element={<Friends />} />
               <Route path="/history" element={<History />} />
               <Route path="/library" element={<Library />} />
               <Route path="/muscles" element={<Muscles />} />

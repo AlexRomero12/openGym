@@ -41,7 +41,8 @@ export default function TabBar({ onStart }) {
         <span>{S.active ? (cur === 'workout' ? t('Workout') : t('Resume')) : t('Start')}</span>
       </button>
       <Tab k="stats" icon="chart" to="/stats" label={t('Stats')} />
-      <Tab k="library" icon="list" to="/library" label={t('Exercises')} />
+      {/* Feature local: ranking entre perfiles de la instancia (una sola app). */}
+      <Tab k="friends" icon="trophy" to="/friends" label="Amigos" />
     </nav>
   )
 }

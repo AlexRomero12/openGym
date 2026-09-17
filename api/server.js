@@ -19,6 +19,7 @@ import { startCadence } from './coach/cadence.js';
 import { startWarmup } from './coach/warmup.js';
 import { dayReminderPush, restTimerPush, testPush } from './push-messages.js';
 import { verifyError } from './verify-error.js';
+import { friendsRanking, setFriendShare, isInstanceOwner } from './friends.js';
 
 const PORT = +(process.env.PORT || 3000);
 const DATA = process.env.DATA_DIR || '/data';
@@ -654,6 +655,41 @@ const routes = {
     const user = readSession(req);
     if (!user) return json(res, 401, { error: 'not signed in' });
     json(res, 200, { user: { id: user.id, name: user.name, admin: isAdmin(user) } });
+  },
+
+  // Ranking «Amigos» (feature local): agregado de solo lectura sobre los perfiles que comparten
+  // (friends.json). La vista recibe solo agregados; nunca estados crudos ni pesos corporales.
+  // El `viewerUid` es lo único que decide si viaja la sección de gestión (dueño = primer perfil).
+  'GET /api/friends': async (req, res) => {
+    const user = readSession(req);
+    if (!user) return json(res, 401, { error: 'not signed in' });
+    const norm = new URL(req.url, 'http://x').searchParams.get('norm') === 'abs' ? 'abs' : 'rel';
+    try {
+      json(res, 200, friendsRanking(DATA, norm, new Date(), user.id, isAdmin(user)));
+    } catch (e) {
+      console.error('friends', e);
+      json(res, 500, { error: 'server error' });
+    }
+  },
+
+  // Gestión del ranking: solo el dueño de la instancia (el primer perfil registrado) puede
+  // sumar o quitar perfiles; escribe friends.json en el servidor (atómico).
+  'POST /api/friends/add': async (req, res) => {
+    const user = readSession(req);
+    if (!user) return json(res, 401, { error: 'not signed in' });
+    if (!isInstanceOwner(DATA, user.id, isAdmin(user))) return json(res, 403, { error: 'only the instance owner can manage the ranking' });
+    const body = await readBody(req);
+    try { setFriendShare(DATA, String(body.uid || ''), true); json(res, 200, { ok: true }); }
+    catch (e) { json(res, 400, { error: String(e.message || e) }); }
+  },
+
+  'POST /api/friends/remove': async (req, res) => {
+    const user = readSession(req);
+    if (!user) return json(res, 401, { error: 'not signed in' });
+    if (!isInstanceOwner(DATA, user.id, isAdmin(user))) return json(res, 403, { error: 'only the instance owner can manage the ranking' });
+    const body = await readBody(req);
+    try { setFriendShare(DATA, String(body.uid || ''), false); json(res, 200, { ok: true }); }
+    catch (e) { json(res, 400, { error: String(e.message || e) }); }
   },
 
   'POST /api/register/options': async (req, res) => {
