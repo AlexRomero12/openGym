@@ -57,6 +57,13 @@ indica aparte (la traducción se propone en el **PR #245**).
   `POST /api/coach/credential`, `POST /api/coach/credential/models` y
   `POST /api/coach/credential/remove`; tests propios en `api/test/coach-profile.test.js` y
   `frontend/src/views/CoachAccount.test.jsx`.
+- 🌐 **Panel de Admin traducido al español** (`views/Admin.jsx`, `views/AdminCoach.jsx` y el
+  registro de actividad de `lib/audit.js`). El upstream lo mantiene en inglés a propósito; en el
+  fork sigue el idioma de la UI, así que con `es` seleccionado todo el panel (tarjetas, pasos del
+  Coach, invitaciones, registro de actividad, tiempos relativos) aparece en español. Claves nuevas
+  en `locales/es.js` (221 + las frases del registro), sin duplicados. De paso: arreglado un test
+  de `coach-local` que usaba la fecha UTC y fallaba de noche en zonas GMT-negativas (ahora usa
+  `todayISO()` como la app).
 
 ## v1.3.7 — 2026-09-12
 
