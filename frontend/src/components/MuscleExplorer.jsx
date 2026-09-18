@@ -4,7 +4,8 @@ import { BODYPARTS, allExercises, equipmentOf, matchExercise } from '../lib/exer
 import { activeProfile, exAvailable } from '../lib/equipment.js'
 import { bestWeightFor } from '../lib/history.js'
 import { fmtNum } from '../lib/format.js'
-import { MUSCLES, MUSCLE_NAME, musclesOf } from '../lib/muscles.js'
+import { MUSCLE_NAME, musclesOf } from '../lib/muscles.js'
+import { isWarmup } from '../lib/warmups.js'
 import { t, exerciseNameFor } from '../lib/i18n.js'
 import BodyMap from './BodyMap.jsx'
 import { Thumb } from './Media.jsx'
@@ -15,7 +16,10 @@ import { isFav, sortFavouritesFirst } from '../lib/favourites.js'
 
 // One explorer for the Library and every catalogue picker. Supplying `onPick` turns
 // a result into a selection; without it the explorer behaves like the normal Library.
-export default function MuscleExplorer({ onPick, onDetail, onPlan }) {
+// `catalog` restricts the browse to one list (Calentamientos uses it to show only warmups) and
+// `muscleMap` lets that list say which muscle each exercise belongs to (the curated warm-up
+// assignment, which can differ from the dataset's own `tg`).
+export default function MuscleExplorer({ onPick, onDetail, onPlan, catalog: scoped, muscleMap = musclesOf }) {
   const S = useStore(s => s.S)
   const [selected, setSelected] = useState(null)
   const [q, setQ] = useState('')
@@ -23,18 +27,19 @@ export default function MuscleExplorer({ onPick, onDetail, onPlan }) {
   const [eq, setEq] = useState('')
   const [shown, setShown] = useState(40)
   const [showAll, setShowAll] = useState(false)   // ignore the active equipment profile for this session
+  const [type, setType] = useState('')            // '' = todo, 'work' = ejercicios, 'warmup' = calentamientos
   // Same rule as the Library and the picker: the active equipment profile narrows the catalogue
   // (and the per-muscle counts) unless the user asks for everything.
   const profile = activeProfile(S)
   const catalog = useMemo(() => {
-    const all = allExercises(S)
+    const all = scoped || allExercises(S)
     return (profile && !showAll) ? all.filter(e => exAvailable(S, e)) : all
-  }, [S.customEx, S.equipFilterOn, S.activeEquipId, S.equipProfiles, showAll])
-  const counts = useMemo(() => Object.fromEntries(MUSCLES.map(m => [m,
-    catalog.filter(e => musclesOf(e)[m]).length
-  ])), [catalog])
+  }, [scoped, S.customEx, S.equipFilterOn, S.activeEquipId, S.equipProfiles, showAll])
+  const hasWork = useMemo(() => catalog.some(e => !isWarmup(e.id)), [catalog])
+  const hasWarmups = useMemo(() => catalog.some(e => isWarmup(e.id)), [catalog])
   const pick = muscle => { setSelected(muscle === selected ? null : muscle); setEq(''); setShown(40) }
-  const targeted = selected ? catalog.filter(e => musclesOf(e)[selected]) : []
+  const typeOk = e => !type || (type === 'warmup') === isWarmup(e.id)
+  const targeted = selected ? catalog.filter(e => muscleMap(e)[selected] && typeOk(e)) : []
   const base = targeted.filter(e => (!bp || e.bp === bp) && matchExercise(e, q))
   const eqOpts = equipmentOf(base)
   const eqOn = eqOpts.includes(eq) ? eq : ''
@@ -52,12 +57,13 @@ export default function MuscleExplorer({ onPick, onDetail, onPlan }) {
     </div>}
     <div className="card">
       <BodyMap className="tappable" body={S.body} selected={selected} onMuscle={pick} />
-      <div className="chips" style={{ marginTop: 10 }}>
-        {MUSCLES.map(m => <button key={m} className={'chip' + (selected === m ? ' on' : '')}
-          aria-pressed={selected === m} onClick={() => pick(m)}>
-          {t(MUSCLE_NAME[m])} <span className="dim">{counts[m]}</span>
-        </button>)}
-      </div>
+      {/* El mapa ya elige el músculo, así que los chips de músculo eran redundantes. En su
+          lugar va un filtro por tipo que sí aporta sobre la lista: ejercicio o calentamiento. */}
+      {hasWork && hasWarmups && <div className="chips" style={{ marginTop: 10 }}>
+        <button className={'chip nocap' + (!type ? ' on' : '')} onClick={() => { setType(''); setShown(40) }}>{t('All')}</button>
+        <button className={'chip' + (type === 'work' ? ' on' : '')} onClick={() => { setType('work'); setShown(40) }}>{t('Exercises')}</button>
+        <button className={'chip' + (type === 'warmup' ? ' on' : '')} onClick={() => { setType('warmup'); setShown(40) }}>Calentamientos</button>
+      </div>}
     </div>
 
     {!selected && onPick && <div className="empty"><div className="ico"><Icon name="target" /></div>{t('Choose a muscle to see exercises that train it.')}</div>}

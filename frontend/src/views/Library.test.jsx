@@ -6,6 +6,7 @@ import { createRoot } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import Library from './Library.jsx'
 import { EXDB } from '../lib/exercises.js'
+import { sentenceCase } from '../lib/i18n-core.js'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
@@ -31,7 +32,7 @@ function render() {
   act(() => root.render(<Library />))
   return host
 }
-const names = host => [...host.querySelectorAll('.item .tt')].map(el => el.textContent).slice(1)   // drop "Create your own"
+const names = host => [...host.querySelectorAll('.item .tt')].map(el => el.textContent).slice(2)   // drop "Calentamientos" and "Create your own"
 
 beforeEach(() => {
   mocks.S = { unit: 'kg', lang: 'en', routines: [], workouts: [], customEx: [], exWeights: {}, equipProfiles: [], activeEquipId: null, equipFilterOn: false }
@@ -44,12 +45,12 @@ describe('Library favourites', () => {
     const plain = names(render())
     act(() => { mounted.splice(0).forEach(root => root.unmount()) })
     const fav = [plain[6], plain[2]]
-    mocks.S.favEx = fav.map(n => EXDB.find(e => e.n === n).id)
+    mocks.S.favEx = fav.map(n => EXDB.find(e => sentenceCase(e.n) === n).id)
     const host = render()
     const shown = names(host)
     expect(shown.slice(0, 2)).toEqual(plain.filter(n => fav.includes(n)))
     expect(shown.slice(2)).toEqual(plain.filter(n => !fav.includes(n)))
-    const rows = [...host.querySelectorAll('.item')].slice(1)
+    const rows = [...host.querySelectorAll('.item')].slice(2)
     expect(rows[0].querySelector('.fav-star')).not.toBeNull()
     expect(rows[2].querySelector('.fav-star')).toBeNull()
   })
@@ -62,7 +63,7 @@ describe('Library favourites', () => {
     const chip = [...host.querySelectorAll('.chips .chip')].find(b => b.textContent === 'chest')
     act(() => chip.click())
     const shown = names(host)
-    expect(shown[0]).toBe(chest[4].n)
-    expect(shown).not.toContain(legs.n)
+    expect(shown[0]).toBe(sentenceCase(chest[4].n))
+    expect(shown).not.toContain(sentenceCase(legs.n))
   })
 })

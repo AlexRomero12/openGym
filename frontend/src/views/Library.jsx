@@ -14,7 +14,10 @@ import { Button } from '../components/ui.jsx'
 import { tappable, useRevealActiveChip } from '../lib/use-sheet-keyboard.js'
 import { isFav, sortFavouritesFirst } from '../lib/favourites.js'
 
-export default function Library() {
+// `embedded` la usa Plan para mostrar la Biblioteca como apartado suyo: sin el encabezado
+// grande (Plan ya tiene el suyo y el Segmented que cambia de sección), pero con el mismo
+// buscador, filtros y filas.
+export default function Library({ embedded = false }) {
   const nav = useNavigate()
   const S = useStore(s => s.S)
   const [q, setQ] = useState('')
@@ -35,9 +38,13 @@ export default function Library() {
   useRevealActiveChip(eqStrip, eqOn)
 
   return <>
-    <div className="hdr"><div><h1>{t('Exercises')}</h1><div className="sub">{t('{0} exercises with animations', EXDB.length)}</div></div>
-      <Button size="sm" variant="tinted" icon="target" onClick={() => nav('/muscles')}>{t('By muscle')}</Button>
-    </div>
+    {embedded
+      ? <div className="row" style={{ justifyContent: 'flex-end', marginBottom: 10 }}>
+        <Button size="sm" variant="tinted" icon="target" onClick={() => nav('/muscles')}>{t('By muscle')}</Button>
+      </div>
+      : <div className="hdr"><div><h1>{t('Exercises')}</h1><div className="sub">{t('{0} exercises with animations', EXDB.length)}</div></div>
+        <Button size="sm" variant="tinted" icon="target" onClick={() => nav('/muscles')}>{t('By muscle')}</Button>
+      </div>}
     <div className="search" style={{ marginBottom: 10 }}><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
       <input className="input" placeholder={t('Search…')} value={q} onChange={e => { setQ(e.target.value); setShown(40) }} /></div>
     {profile && <div className="small dim row" style={{ margin: '-4px 2px 10px', gap: 6, alignItems: 'center' }}>
@@ -59,6 +66,12 @@ export default function Library() {
       {eqOpts.map(x => <button key={x} className={'chip' + (eqOn === x ? ' on' : '')} onClick={() => { setEq(x); setShown(40) }}>{t(x)}</button>)}
     </div>}
     <div className="list">
+      {/* Feature local: los calentamientos tienen su propio apartado, con la lista curada
+          agrupada por el músculo que prepara cada ejercicio. */}
+      <div className="item" {...tappable(() => nav('/warmups'))}>
+        <div className="thumb thumb-x"><Icon name="stretch" /></div>
+        <div className="grow"><div className="tt">Calentamientos</div><div className="ss">movilidad y estiramientos por músculo</div></div><Icon name="chevronRight" className="chev" />
+      </div>
       <div className="item" {...tappable(() => customExSheet(null, ex => exerciseDetailSheet(ex), q.trim()))}>
         <div className="thumb thumb-x"><Icon name="sparkles" /></div>
         <div className="grow"><div className="tt">{t('Create your own exercise')}</div><div className="ss">{t('name + body part, no animation')}</div></div><Icon name="plus" className="chev" />

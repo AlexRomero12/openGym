@@ -5,6 +5,7 @@ import React, { act } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createRoot } from 'react-dom/client'
 import { EXDB } from './lib/exercises.js'
+import { sentenceCase } from './lib/i18n-core.js'
 import { DEF, useStore } from './store/useStore.js'
 import { useUI } from './store/useUI.js'
 import { exerciseDetailSheet, exercisePicker } from './sheets.jsx'
@@ -64,18 +65,18 @@ describe('exercise detail star', () => {
 
 describe('exercise picker', () => {
   it('lists favourites first and marks them, keeping the rest in catalogue order', () => {
-    const plain = names((exercisePicker(vi.fn()), renderTop())).slice(1)   // drop "Create your own"
+    const plain = names((exercisePicker(vi.fn()), renderTop())).slice(2)   // drop "Calentamientos" and "Create your own"
     useUI.setState({ sheets: [] })
     const fav = [plain[7], plain[3]]
-    const favIds = fav.map(n => EXDB.find(e => e.n === n).id)
+    const favIds = fav.map(n => EXDB.find(e => sentenceCase(e.n) === n).id)
     useStore.setState(s => ({ S: { ...s.S, favEx: favIds } }))
     exercisePicker(vi.fn())
     const host = renderTop()
-    const shown = names(host).slice(1)
+    const shown = names(host).slice(2)
     // Favourites keep the list's own order among themselves — not the order they were starred in.
     expect(shown.slice(0, 2)).toEqual(plain.filter(n => fav.includes(n)))
     expect(shown.slice(2)).toEqual(plain.filter(n => !fav.includes(n)))
-    const rows = [...host.querySelectorAll('.item')].slice(1)
+    const rows = [...host.querySelectorAll('.item')].slice(2)
     expect(rows.slice(0, 2).every(r => r.querySelector('.tt .fav-star'))).toBe(true)
     expect(rows[2].querySelector('.tt .fav-star')).toBeNull()
   })
@@ -91,6 +92,6 @@ describe('exercise picker', () => {
     host = renderTop()
     expect(chip(host).textContent).toBe('Favourites (2)')
     act(() => chip(host).click())
-    expect(names(host)).toEqual([EXDB[5].n, EXDB[9].n])
+    expect(names(host)).toEqual([sentenceCase(EXDB[5].n), sentenceCase(EXDB[9].n)])
   })
 })

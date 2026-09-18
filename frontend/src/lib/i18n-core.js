@@ -84,7 +84,9 @@ export const sentenceCase = s => String(s || '').replace(/\p{L}/u, ch => ch.toUp
 // `text-transform: capitalize` a nombres de ejercicios.
 export const exerciseNameFor = ex => {
   const translated = exerciseNames && ex && exerciseNames[ex.id]
-  if (!translated) return sentenceCase(ex?.n || '')
+  // User-created exercises are named by the user: sentence case would rewrite what they typed
+  // («c1» → «C1»), so only the generated catalogue goes through it.
+  if (!translated) return ex?.custom ? (ex?.n || '') : sentenceCase(ex?.n || '')
   // Some names (Burpee, Pilates, brand/model terms) are the established term in the target
   // language too. Repeating an identical loanword in parentheses adds noise rather than
   // context. Compared in the active language's own casing rules, not hardcoded to one —

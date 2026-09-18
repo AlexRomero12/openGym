@@ -109,6 +109,41 @@ indica aparte (la traducción se propone en el **PR #245**).
 - 🏷️ **Los nombres en las tarjetas de la app también siguen el idioma.** `exName`/`exTitle` (Coach)
   y `nameOf` (insights del debrief) usaban el catálogo inglés: ahora leen con `exerciseNameFor`,
   como el resto de la app (las filas de «Mejor serie, 1RM estimado» y los títulos de cada cambio).
+- 🧘 **Calentamientos y estiramientos (18/sep).** Apartado propio en **Plan → Ejercicios →
+  Calentamientos** (`views/Warmups.jsx`): 70 movimientos curados del catálogo (2 cardio, 2
+  activación, 11 movilidad, 55 estiramientos) con su imagen y animación de siempre y asignados al
+  músculo que prepara (`lib/warmups.js`); en pantalla van general primero y luego por músculo
+  head-to-toe (trapecios → tibial). La lista agota lo que el dataset tiene en estiramientos y
+  movilidad: incluye variantes con pelota, rodillo, cuerda y asistidas, y cubre los 16 grupos
+  (el dataset no trae estiramiento de bíceps, serratus ni oblicuos). Cada fila abre el detalle del
+  ejercicio y se manda al plan con «Plan», igual que en la Biblioteca. **Buscador, chips y botón
+  «Por músculo»** (`btn tinted sm`) con el `MuscleExplorer` de Ejercicios limitado a warmups (mapa
+  del cuerpo + chips por músculo): `warmupMatches` busca por el músculo curado aunque el dataset use
+  otro nombre («pecho» encuentra los de «pectorals», «flexores de cadera» los de `hip-flexors`). En
+  móvil el botón «Por músculo» vive en la fila del buscador (la flecha + el título largo + el botón
+  no cabían en el `hdr` y lo partían).
+- 🎛️ **El selector de ejercicios entiende Calentamientos.** Al añadir un ejercicio (rutina o
+  entreno) la lista abre con la fila **Calentamientos**; con ese modo activo los chips dejan de ser
+  partes del cuerpo y pasan a ser el **músculo curado** (General → head-to-toe) que filtra la lista
+  sin salir del modo — antes, tocar «chest» te sacaba y mostraba todo el catálogo. El buscador dice
+  «Buscar en calentamientos…» y el chip del selector usa la misma búsqueda. Tests:
+  `sheets.warmups.test.jsx` (fila, filtro por músculo curado y placeholder).
+- 🗺️ **El explorador por músculo pierde los chips de músculo.** El BodyMap ya es tappable, así que
+  la fila de 18 chips era redundante; en su lugar va un filtro **Todo / Ejercicios /
+  Calentamientos** que filtra la lista del músculo elegido (visible solo cuando hay de los dos
+  tipos). El equipamiento se queda como estaba. En Calentamientos el explorador usa el **músculo
+  curado** de cada movimiento (no el `tg` del dataset: «back pec stretch» cuenta como pecho).
+  Tests: `components/MuscleExplorer.test.jsx`.
+- 🐛 **Los ejercicios propios conservan su nombre exacto** tras el cambio a tipo oración:
+  `exerciseNameFor` ya no capitaliza los `custom` («c1» sigue «c1»), como decía el comentario. De
+  paso quedan en verde los tests que ese cambio había dejado rojos (nombres es/pt, RoutineEdit,
+  Stats, favoritos), ajustando las expectativas con `sentenceCase`.
+- 🧭 **La Biblioteca es un apartado dentro de Plan** («Rutinas | Ejercicios», `Segmented`), para no
+  romper la simetría del menú inferior: cinco pestañas (Inicio · Plan · Start · Stats · Amigos). El
+  tab va en la URL (`/plan?tab=exercises`) para que volver de «Por músculo» o «Calentamientos»
+  regrese a la sección; la pestaña Plan queda encendida en `/library`, `/muscles` y `/warmups`.
+  Tests: `views/Plan.test.jsx` (las dos secciones) y `components/TabBar.test.jsx` (simetría y
+  pestaña encendida).
 
 ## v1.3.7 — 2026-09-12
 

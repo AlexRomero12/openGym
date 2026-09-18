@@ -1,10 +1,12 @@
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useStore } from '../store/useStore.js'
 import { DAYN, weekOrder, weekStartOf, uid, exCount } from '../lib/format.js'
 import { t } from '../lib/i18n.js'
+import { EXDB } from '../lib/exercises.js'
 import { dayAssignSheet, dayAddRoutineSheet, starterPlanSheet, planToolsSheet } from '../sheets.jsx'
 import Icon from '../components/Icon.jsx'
-import { Button } from '../components/ui.jsx'
+import { Button, Segmented } from '../components/ui.jsx'
+import Library from './Library.jsx'
 import { tappable } from '../lib/use-sheet-keyboard.js'
 import { glyphOf, DEFAULT_GLYPH } from '../lib/glyphs.js'
 import { DEMO } from '../lib/demo.js'
@@ -25,6 +27,17 @@ export default function Plan() {
      an instance without the feature sees exactly the Plan screen it saw before. */
   const showCoach = coachAvailable(config, user, { demo: DEMO, mobile: MOBILE, coachMode })
 
+  // La Biblioteca vive como apartado de Plan (el menú inferior mantiene sus cinco pestañas
+  // simétricas): el tab va en la URL para que volver de «Por músculo» o «Calentamientos»
+  // regrese a esta sección.
+  const [params, setParams] = useSearchParams()
+  const tab = params.get('tab') === 'exercises' ? 'exercises' : 'routines'
+  const setTab = next => setParams(prev => {
+    const p = new URLSearchParams(prev)
+    if (next === 'exercises') p.set('tab', 'exercises'); else p.delete('tab')
+    return p
+  }, { replace: true })
+
   const addRoutine = () => {
     const r = { id: uid(), name: t('New routine'), emoji: DEFAULT_GLYPH, ex: [] }
     update(s => { s.routines.push(r) })
@@ -39,9 +52,16 @@ export default function Plan() {
 
   return <>
     <div className="hdr">
-      <div><h1>{t('Plan')}</h1><div className="sub">{t('Your weekly routine')}</div></div>
+      <div><h1>{t('Plan')}</h1><div className="sub">{tab === 'exercises' ? t('{0} exercises with animations', EXDB.length) : t('Your weekly routine')}</div></div>
       <button className="iconbtn" onClick={planToolsSheet} aria-label={t('Share your plan')} title={t('Share your plan')}><Icon name="upload" /></button>
     </div>
+    <div style={{ marginBottom: 12 }}>
+      <Segmented value={tab} onChange={setTab} options={[
+        { value: 'routines', label: t('Routines') },
+        { value: 'exercises', label: t('Exercises') },
+      ]} />
+    </div>
+    {tab === 'exercises' ? <Library embedded /> : <>
     {showCoach && <button className="coach-cta" onClick={() => nav('/coach')}>
       <span className="coach-cta-av"><Icon name="sparkles" /></span>
       <span className="coach-cta-t">
@@ -91,5 +111,6 @@ export default function Plan() {
         <Button icon="sparkles" onClick={starterPlanSheet}>{t('Load starter plan')}</Button>
       </>}
     </div></div>
+    </>}
   </>
 }

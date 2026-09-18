@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import ptBR from '../exercise-names/pt-BR.js'
 import { EXDB } from './exercises-data.js'
 import {
-  EXERCISE_NAME_LANGS, _setLangState, exerciseNameFor, exerciseNameSearchText
+  EXERCISE_NAME_LANGS, _setLangState, exerciseNameFor, exerciseNameSearchText, sentenceCase
 } from './i18n-core.js'
 
 describe('Brazilian Portuguese exercise names', () => {
@@ -46,16 +46,16 @@ describe('Brazilian Portuguese exercise names', () => {
   test('shows Portuguese first and preserves the canonical English title', () => {
     const exercise = EXDB[0]
     _setLangState('pt-BR', {}, null, ptBR)
-    expect(exerciseNameFor(exercise)).toBe(`${ptBR[exercise.id]} (${exercise.n})`)
+    expect(exerciseNameFor(exercise)).toBe(`${sentenceCase(ptBR[exercise.id])} (${exercise.n})`)
     expect(exerciseNameSearchText(exercise)).toContain(ptBR[exercise.id])
     expect(exerciseNameSearchText(exercise)).toContain(exercise.n)
   })
 
   test('never translates custom exercises or changes other languages', () => {
-    const custom = { id: 'custom-1', n: 'Meu exercício' }
+    const custom = { id: 'custom-1', n: 'Meu exercício', custom: true }
     _setLangState('pt-BR', {}, null, ptBR)
     expect(exerciseNameFor(custom)).toBe('Meu exercício')
     _setLangState('en', {}, null, null)
-    expect(exerciseNameFor(EXDB[0])).toBe(EXDB[0].n)
+    expect(exerciseNameFor(EXDB[0])).toBe(sentenceCase(EXDB[0].n))
   })
 })

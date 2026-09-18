@@ -13,7 +13,10 @@ export default function TabBar({ onStart }) {
   const isGuest = useStore(s => s.isGuest())
   if (!user && !isGuest) return null
   const cur = loc.pathname.split('/')[1] || 'home'
-  const on = k => cur === k || (cur === 'history' && k === 'stats') || (cur === 'settings' && k === 'home') || (cur === 'muscles' && k === 'library')
+  const on = k => cur === k || (cur === 'history' && k === 'stats') || (cur === 'settings' && k === 'home')
+    // La Biblioteca y sus derivadas viven dentro de Plan (apartado «Ejercicios»), así que su
+    // pestaña queda encendida también ahí.
+    || (['library', 'muscles', 'warmups'].includes(cur) && k === 'plan')
 
   const startWorkout = () => {
     if (!S.active) {
