@@ -164,8 +164,8 @@ export function coachRoutes({ json, readBody, readSession, requireAdmin }) {
           return {
             id, label: p.label, keyPlaceholder: p.keyPlaceholder || null, baseUrl: !!p.baseUrl, keyOptional: !!p.keyOptional, defaultModel: p.defaultModel || null,
             // Which models take an effort, and which values it accepts (absent for providers
-            // with no such control at all).
-            efforts: p.efforts || null, defaultEffort: p.defaultEffort || null, effortsForModels: p.effortsForModels || null
+            // with no such control at all; `effortsByModel` covers the multi-vendor gateways).
+            efforts: p.efforts || null, defaultEffort: p.defaultEffort || null, effortsForModels: p.effortsForModels || null, effortsByModel: p.effortsByModel || null
           };
         })
       });
@@ -269,7 +269,7 @@ export function coachRoutes({ json, readBody, readSession, requireAdmin }) {
           setupToken: !!p.setupToken, deviceLogin: !!p.deviceLogin, apiKey: !!p.apiKeyEnv,
           http: !!p.http, baseUrl: !!p.baseUrl, keyOptional: !!p.keyOptional, keyPlaceholder: p.keyPlaceholder || null,
           defaultModel: p.defaultModel || null,
-          efforts: p.efforts || null, defaultEffort: p.defaultEffort || null, effortsForModels: p.effortsForModels || null,
+          efforts: p.efforts || null, defaultEffort: p.defaultEffort || null, effortsForModels: p.effortsForModels || null, effortsByModel: p.effortsByModel || null,
           // Which providers already hold a key — so switching chips is visibly not a reset.
           connected: !!(cfgStore.authFor(cfg, id) && cfgStore.authFor(cfg, id).data)
         })),

@@ -30,7 +30,7 @@ vi.mock('../lib/coach-api.js', () => ({
 const PROVIDERS = [
   { id: 'anthropic', label: 'Anthropic API', keyPlaceholder: 'sk-ant-…', baseUrl: false, keyOptional: false, defaultModel: 'claude-opus-5' },
   { id: 'compatible', label: 'OpenAI-compatible endpoint', keyPlaceholder: '(optional)', baseUrl: true, keyOptional: true, defaultModel: null },
-  { id: 'opencode-go', label: 'OpenCode Go', keyPlaceholder: 'sk-…', baseUrl: false, keyOptional: false, defaultModel: null, efforts: ['off', 'low', 'medium', 'high', 'max'], defaultEffort: 'off', effortsForModels: 'deepseek' }
+  { id: 'opencode-go', label: 'OpenCode Go', keyPlaceholder: 'sk-…', baseUrl: false, keyOptional: false, defaultModel: null, effortsByModel: [{ prefix: 'deepseek', efforts: ['off', 'low', 'medium', 'high', 'max'], defaultEffort: 'off' }] }
 ]
 
 let root, container

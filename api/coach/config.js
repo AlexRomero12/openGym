@@ -26,7 +26,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { HTTP_PROVIDERS, baseUrlFor } from './core/providers.js';
+import { HTTP_PROVIDERS, baseUrlFor, defaultEffortFor } from './core/providers.js';
 
 const DATA = process.env.DATA_DIR || '/data';
 const FILE = path.join(DATA, 'coach.json');
@@ -171,7 +171,8 @@ export function reset() { cache = null; keyCache = null; }
    The only way the rest of the code reads the per-provider maps, so the shape stays here. */
 export const authFor = (cfg = load(), p = cfg.provider) => (cfg.auth && cfg.auth[p]) || null;
 export const modelFor = (cfg = load(), p = cfg.provider) => (cfg.models && cfg.models[p]) || (PROVIDERS[p] && PROVIDERS[p].defaultModel) || null;
-export const effortFor = (cfg = load(), p = cfg.provider) => (cfg.efforts && cfg.efforts[p]) || (PROVIDERS[p] && PROVIDERS[p].defaultEffort) || null;
+export const effortFor = (cfg = load(), p = cfg.provider, model = null) =>
+  (cfg.efforts && cfg.efforts[p]) || defaultEffortFor(p, model || modelFor(cfg, p)) || null;
 export const optionsFor = (cfg = load(), p = cfg.provider) => (cfg.providerOptions && cfg.providerOptions[p]) || {};
 export const boundUidFor = (cfg = load(), p = cfg.provider) => (cfg.boundUid && cfg.boundUid[p]) || null;
 export function saveAuth(provider, auth) {
@@ -299,11 +300,12 @@ export function effectiveFor(uid) {
   }
   const rec = loadProfileAuth(uid);
   const provider = rec && PROVIDERS[rec.provider] ? rec.provider : cfg.provider;
+  const model = (rec && rec.model) || modelFor(cfg, provider);
   return {
     provider,
-    model: (rec && rec.model) || modelFor(cfg, provider),
-    // What this profile asked for, or the provider's own default when they never chose.
-    effort: (rec && rec.effort) || (PROVIDERS[provider] && PROVIDERS[provider].defaultEffort) || null,
+    model,
+    // What this profile asked for, or the model's own default when they never chose.
+    effort: (rec && rec.effort) || defaultEffortFor(provider, model) || null,
     baseUrl: (rec && rec.baseUrl) || null,
     credential: credentialFor(uid)
   };
@@ -339,7 +341,7 @@ export function accountFor(uid) {
     providerLabel: (PROVIDERS[provider] || providerMeta(cfg)).label,
     // The model and endpoint are the profile's own in profile mode, the instance's otherwise.
     model: c.model || modelFor(cfg, provider),
-    effort: c.effort || effortFor(cfg, provider),
+    effort: c.effort || effortFor(cfg, provider, c.model || modelFor(cfg, provider)),
     baseUrl: c.baseUrl || null,
     account: c.ok ? (c.account || null) : null,
     connected: !!c.ok,

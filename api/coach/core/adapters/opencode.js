@@ -18,13 +18,13 @@ export const isDeepseekModel = model => String(model || '').toLowerCase().starts
 export const isGlmModel = model => String(model || '').toLowerCase().startsWith('glm');
 
 /* GLM also thinks by default, and its reasoning is billed as output — same story as DeepSeek:
- * a review ran for three minutes and came back cut off. The gateway takes OpenAI's
- * `reasoning_effort` and passes it through (verified against the live gateway: `none` answers in
- * 7 completion tokens where the default takes 20-30), so off is mapped to `none` and the rest to
- * the vendor's own names; `max` clamps to `high` because `max` behaved like no thinking at all.
- * The 2.5/3-style `thinking` field is refused by this upstream ("unknown field thinking"). */
-const GLM_EFFORT = { off: 'none', minimal: 'minimal', low: 'low', medium: 'medium', high: 'high', max: 'high' };
-export const glmEffortBody = effort => ({ reasoning_effort: GLM_EFFORT[effort] || 'none' });
+ * a review ran for three minutes and came back cut off. The difference is that GLM cannot stop
+ * thinking at all; its own gateway says so ("This model always engages in thinking and cannot be
+ * disabled; please use low, high, or max"), which is why the effort list for these models starts
+ * at `low`. The field it does take is OpenAI's `reasoning_effort`, verified against the live
+ * gateway, and `medium` rides as `high` — the vendor's own middle value. */
+const GLM_EFFORT = { low: 'low', medium: 'high', high: 'high', max: 'max' };
+export const glmEffortBody = effort => ({ reasoning_effort: GLM_EFFORT[effort] || 'low' });
 
 export const opencodeEffortBody = (effort, { model } = {}) => {
   if (isDeepseekModel(model)) return deepseekEffortBody(effort);

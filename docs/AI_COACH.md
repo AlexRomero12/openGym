@@ -69,11 +69,13 @@ budget the thinking ate the answer (jobs came back *cut off at the output limit*
 and every request took minutes. The account screen — and the admin card for instance mode —
 offers the levels the chosen model actually accepts and stores the pick next to the credential:
 DeepSeek `off`/`low`/`medium`/`high`/`max` (off is its default here), OpenAI `minimal`–`high`,
-Gemini `low`–`high` (`low` by default), and the OpenCode gateways for their DeepSeek and GLM
-models (`off` by default). What a model does not take is never sent: the server refuses an
-effort the model does not accept, so a 400 from a wrong parameter cannot happen. On the gateway,
-DeepSeek takes `thinking`/`reasoning_effort` and GLM takes `reasoning_effort` (`none` stops its
-thinking); Gemini's reasoning parts are filtered out of the answer.
+Gemini `low`–`high` (`low` by default), and the OpenCode gateways per model — their DeepSeek
+models can stop thinking (`off` by default), while GLM cannot ("this model always engages in
+thinking; use low, high or max", its own 400) and therefore runs from `low` to `max`, defaulting
+to `low`. What a model does not take is never sent: the server refuses an effort the model does
+not accept, so a 400 from a wrong parameter cannot happen. On the gateway, DeepSeek takes
+`thinking`/`reasoning_effort` and GLM takes `reasoning_effort` (its `medium` rides as `high`);
+Gemini's reasoning parts are filtered out of the answer.
 
 The card says two things worth reading: which account is being spent, and — for these
 providers — that jobs run no child process at all, so the privilege-drop line reads as not

@@ -603,12 +603,17 @@ export const exTitle = exName
 /* ============================ reasoning effort ============================ */
 
 /** The effort values a provider's metadata allows for a given model — empty when the model has
- *  no such control (or the control is a gateway's and belongs to another vendor's models). */
+ *  no such control (or the control is a gateway's and belongs to another vendor's models). The
+ *  server sends the same rules the adapter uses, so what the picker offers is what gets sent. */
 export const effortsForProvider = (meta, model) => {
+  const m = String(model || '').toLowerCase()
+  if (meta?.effortsByModel) {
+    const row = meta.effortsByModel.find(r => m.startsWith(r.prefix))
+    return row ? row.efforts : []
+  }
   if (!meta?.efforts) return []
   if (meta.effortsForModels) {
     const prefixes = [].concat(meta.effortsForModels)
-    const m = String(model || '').toLowerCase()
     if (!prefixes.some(p => m.startsWith(p))) return []
   }
   return meta.efforts

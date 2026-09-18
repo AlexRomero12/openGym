@@ -197,15 +197,16 @@ test('DeepSeek reasoning is off by default, and an effort turns it back on', asy
     assert.equal(h.calls[0].body.reasoning_effort, 'low', adapter.id);
   }
 
-  // GLM through the same gateway: reasoning_effort, with `none` when off (its default here).
+  // GLM through the same gateway: it cannot stop thinking (the vendor says so), so its list
+  // starts at low and `medium` rides as the vendor's middle value, high.
   for (const adapter of [opencode, opencodeGo]) {
     const g1 = fakeFetch([ok({ choices: [{ message: { content: ANSWER }, finish_reason: 'stop' }] })]);
     await adapter.invoke({ cfg: {}, prompt: 'P', env: { OPENCODE_API_KEY: 'sk-oc-1' }, model: 'glm-5.3-flash', fetch: g1 });
-    assert.equal(g1.calls[0].body.reasoning_effort, 'none', adapter.id);
+    assert.equal(g1.calls[0].body.reasoning_effort, 'low', adapter.id + ' default');
 
     const g2 = fakeFetch([ok({ choices: [{ message: { content: ANSWER }, finish_reason: 'stop' }] })]);
     await adapter.invoke({ cfg: {}, prompt: 'P', env: { OPENCODE_API_KEY: 'sk-oc-1' }, model: 'glm-5.3-flash', effort: 'medium', fetch: g2 });
-    assert.equal(g2.calls[0].body.reasoning_effort, 'medium', adapter.id);
+    assert.equal(g2.calls[0].body.reasoning_effort, 'high', adapter.id);
   }
 
   // Another vendor's model on the same gateway gets nothing extra: it has its own knobs.

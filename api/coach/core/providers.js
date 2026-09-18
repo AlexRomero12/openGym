@@ -60,13 +60,18 @@ export const HTTP_PROVIDERS = Object.freeze({
   // OpenCode's gateway, in its two plans: Zen (pay as you go) and Go (subscription). The same
   // account key works on both; the catalogs differ, and each lists its own models. No default
   // model on purpose — the list decides, so a retired name never becomes a failed first run.
+  // The effort control is per vendor and it differs: DeepSeek can stop thinking, GLM cannot
+  // ("this model always engages in thinking; use low, high or max" — its own 400).
   opencode: Object.freeze({
     label: 'OpenCode Zen', runtime: 'HTTPS', http: true,
     apiKeyEnv: 'OPENCODE_API_KEY', oauthEnv: null,
     defaultBase: 'https://opencode.ai/zen',
     defaultModel: null,
     keyPlaceholder: 'sk-…',
-    efforts: ['off', 'minimal', 'low', 'medium', 'high', 'max'], defaultEffort: 'off', effortsForModels: ['deepseek', 'glm']
+    effortsByModel: [
+      { prefix: 'deepseek', efforts: ['off', 'low', 'medium', 'high', 'max'], defaultEffort: 'off' },
+      { prefix: 'glm', efforts: ['low', 'high', 'max'], defaultEffort: 'low' }
+    ]
   }),
   'opencode-go': Object.freeze({
     label: 'OpenCode Go', runtime: 'HTTPS', http: true,
@@ -74,7 +79,10 @@ export const HTTP_PROVIDERS = Object.freeze({
     defaultBase: 'https://opencode.ai/zen/go',
     defaultModel: null,
     keyPlaceholder: 'sk-…',
-    efforts: ['off', 'minimal', 'low', 'medium', 'high', 'max'], defaultEffort: 'off', effortsForModels: ['deepseek', 'glm']
+    effortsByModel: [
+      { prefix: 'deepseek', efforts: ['off', 'low', 'medium', 'high', 'max'], defaultEffort: 'off' },
+      { prefix: 'glm', efforts: ['low', 'high', 'max'], defaultEffort: 'low' }
+    ]
   })
 });
 
@@ -82,17 +90,34 @@ export const HTTP_PROVIDER_IDS = Object.freeze(Object.keys(HTTP_PROVIDERS));
 
 /** The efforts a provider's current model accepts — empty when it has no such control, or when
  *  the control belongs to some models of a multi-vendor gateway and this is not one of them.
- *  `effortsForModels` is a lowercase model prefix (or a list of them) so it can travel to the
- *  setup screen as-is (a regex is not JSON), keeping the rule in one place. */
+ *  `effortsByModel` keeps the per-vendor rules in one serializable place (lowercase model
+ *  prefixes, not regexes), so the setup screen applies exactly what the adapter will. */
 export function effortsFor(id, model) {
   const meta = HTTP_PROVIDERS[id];
-  if (!meta || !meta.efforts) return [];
+  if (!meta) return [];
+  const m = String(model || '').toLowerCase();
+  if (meta.effortsByModel) {
+    const row = meta.effortsByModel.find(r => m.startsWith(r.prefix));
+    return row ? row.efforts : [];
+  }
   if (meta.effortsForModels) {
     const prefixes = [].concat(meta.effortsForModels);
-    const m = String(model || '').toLowerCase();
     if (!prefixes.some(p => m.startsWith(p))) return [];
   }
-  return meta.efforts;
+  return meta.efforts || [];
+}
+
+/** What a model does when no effort was chosen — 'off' for DeepSeek, 'low' for a GLM that cannot
+ *  stop thinking, the provider's own default where it has one, nothing where it has none. */
+export function defaultEffortFor(id, model) {
+  const meta = HTTP_PROVIDERS[id];
+  if (!meta) return null;
+  const m = String(model || '').toLowerCase();
+  if (meta.effortsByModel) {
+    const row = meta.effortsByModel.find(r => m.startsWith(r.prefix));
+    return row ? (row.defaultEffort || null) : null;
+  }
+  return meta.efforts ? (meta.defaultEffort || null) : null;
 }
 
 /** The base URL a provider will actually be called at: the configured override, else the default. */

@@ -97,13 +97,12 @@ indica aparte (la traducción se propone en el **PR #245**).
   respuesta («cut off at the output limit», o inutilizable) y cada job tardaba minutos. Ahora el
   perfil (y la tarjeta de admin en modo instancia) elige entre los niveles que el modelo acepta —
   DeepSeek `off/low/medium/high/max` (por defecto `off`), OpenAI `minimal–high`, Gemini `low–high`
-  (por defecto `low`) y los gateways de OpenCode para sus modelos **DeepSeek y GLM** (`off` por
-  defecto)—; se guarda con la credencial (`effort`), el servidor rechaza lo que el modelo no acepta
-  y el adaptador lo traduce: `thinking: disabled`/`reasoning_effort` en DeepSeek (API propia),
-  `reasoning_effort` en OpenAI y en GLM vía gateway (`none` para apagado — verificado en vivo:
-  7 tokens de salida frente a 20-30 con el razonamiento encendido), `thinkingConfig.thinkingLevel`
-  en Gemini. Con GLM en Oracle, un review tardaba 185 s y se cortaba; con `reasoning_effort: none`
-  responde en segundos.
+  (por defecto `low`) y los gateways de OpenCode **por modelo**: DeepSeek con `off` por defecto y
+  GLM (que no puede apagarse — su gateway responde «always engages in thinking») de `low` a `max`,
+  por defecto `low`—; se guarda con la credencial (`effort`), el servidor rechaza lo que el modelo
+  no acepta y el adaptador lo traduce: `thinking: disabled`/`reasoning_effort` en DeepSeek,
+  `reasoning_effort` en OpenAI y GLM (`medium` viaja como `high`), `thinkingConfig.thinkingLevel`
+  en Gemini. Con GLM en Oracle, un review tardaba 185 s y se cortaba.
 - 🔭 **Gemini revisado.** Se ignoran las partes `thought` (si se colaban, el JSON dejaba de ser
   parseable → «the app couldn’t use it») y una respuesta vacía da un error claro; el nivel de
   pensamiento se manda cuando corresponde.
