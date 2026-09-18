@@ -40,6 +40,32 @@ export const HTTP_PROVIDERS = Object.freeze({
     defaultBase: null, baseUrl: true, keyOptional: true,
     defaultModel: null,
     keyPlaceholder: '(optional)'
+  }),
+  // DeepSeek's own API — OpenAI-compatible, serves chat completions, JSON output and a models
+  // list; `deepseek-flash` is the current cheap model (legacy `deepseek-v4-flash` still answers).
+  deepseek: Object.freeze({
+    label: 'DeepSeek API', runtime: 'HTTPS', http: true,
+    apiKeyEnv: 'DEEPSEEK_API_KEY', oauthEnv: null,
+    defaultBase: 'https://api.deepseek.com',
+    defaultModel: 'deepseek-flash',
+    keyPlaceholder: 'sk-…'
+  }),
+  // OpenCode's gateway, in its two plans: Zen (pay as you go) and Go (subscription). The same
+  // account key works on both; the catalogs differ, and each lists its own models. No default
+  // model on purpose — the list decides, so a retired name never becomes a failed first run.
+  opencode: Object.freeze({
+    label: 'OpenCode Zen', runtime: 'HTTPS', http: true,
+    apiKeyEnv: 'OPENCODE_API_KEY', oauthEnv: null,
+    defaultBase: 'https://opencode.ai/zen',
+    defaultModel: null,
+    keyPlaceholder: 'sk-…'
+  }),
+  'opencode-go': Object.freeze({
+    label: 'OpenCode Go', runtime: 'HTTPS', http: true,
+    apiKeyEnv: 'OPENCODE_API_KEY', oauthEnv: null,
+    defaultBase: 'https://opencode.ai/zen/go',
+    defaultModel: null,
+    keyPlaceholder: 'sk-…'
   })
 });
 

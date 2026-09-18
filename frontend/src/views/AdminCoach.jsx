@@ -140,7 +140,7 @@ export default function AdminCoach() {
       <h2>{t('AI Coach')}</h2>
       <p>{t('An optional coach that designs training plans and reviews what people actually log. Off right now — nobody sees it anywhere in the app.')}</p>
       <div className="adm-hero-feats">
-        <div><Icon name="clipboard" /><span><b>{t('Bring any AI.')}</b> {t('An API key from Anthropic, OpenAI or Gemini — or a free local model via Ollama.')}</span></div>
+        <div><Icon name="clipboard" /><span><b>{t('Bring any AI.')}</b> {t('An API key from Anthropic, OpenAI, Gemini, DeepSeek or OpenCode — or a free local model via Ollama.')}</span></div>
         <div><Icon name="shield" /><span><b>{t('Private by design.')}</b> {t('A strict allowlist decides what leaves; every change needs the user’s yes and can be undone.')}</span></div>
         <div><Icon name="person" /><span><b>{t('Each user decides.')}</b> {t('Turning it on only makes the Coach available; every person consents for themselves.')}</span></div>
       </div>
@@ -171,7 +171,7 @@ export default function AdminCoach() {
       <div className="row between" style={{ gap: 12, alignItems: 'flex-start' }}>
         <div className="adm-hint" style={{ margin: 0 }}>
           {profile
-            ? <><b>{t('Each profile their own.')}</b> {t('Anyone can connect an Anthropic, OpenAI, Gemini or compatible-endpoint key from Settings → AI Coach. It is encrypted, only that profile’s runs use it, and no route can read it back — not even yours. Switching back resets the daily limits to the shared-account defaults.')}</>
+            ? <><b>{t('Each profile their own.')}</b> {t('Anyone can connect an Anthropic, OpenAI, Gemini, DeepSeek, OpenCode or compatible-endpoint key from Settings → AI Coach. It is encrypted, only that profile’s runs use it, and no route can read it back — not even yours. Switching back resets the daily limits to the shared-account defaults.')}</>
             : <><b>{t('One account for the whole instance.')}</b> {t('You connect one key below and every profile may use it under the daily limits. Turn this on to let each profile bring their own account instead.')}</>}
         </div>
         <Switch checked={profile} disabled={busy} onChange={v => patch({ authMode: v ? 'profile' : 'instance' })} />
@@ -289,7 +289,7 @@ export default function AdminCoach() {
       {/* ---------- profile mode: no instance credential, only a count ---------- */}
       {profile && <div style={{ marginTop: 14 }}>
         <div className="adm-group-t">{t('How profiles connect')}</div>
-        <div className="adm-hint">{t('Each profile connects from Settings → AI Coach — or from the Coach itself, which offers the account screen on first open. Anthropic, OpenAI, Gemini and any OpenAI-compatible endpoint (Ollama, LM Studio, OpenRouter, a gateway) are supported, and each profile picks its own; two people can run two different providers side by side.')}</div>
+        <div className="adm-hint">{t('Each profile connects from Settings → AI Coach — or from the Coach itself, which offers the account screen on first open. Anthropic, OpenAI, Gemini, DeepSeek, OpenCode and any OpenAI-compatible endpoint (Ollama, LM Studio, OpenRouter, a gateway) are supported, and each profile picks its own; two people can run two different providers side by side.')}</div>
         <div className="adm-kv" style={{ marginTop: 10 }}>
           <span className="k">{t('Profiles connected')}</span>
           <span className="v">{t('{0} of {1}', d.profiles?.connected || 0, d.profiles?.total || 0)}</span>

@@ -14,6 +14,9 @@ const anthropic = (await import('../coach/core/adapters/anthropic.js')).default;
 const openai = (await import('../coach/core/adapters/openai.js')).default;
 const gemini = (await import('../coach/core/adapters/gemini.js')).default;
 const compatible = (await import('../coach/core/adapters/compatible.js')).default;
+const deepseek = (await import('../coach/core/adapters/deepseek.js')).default;
+const opencode = (await import('../coach/core/adapters/opencode.js')).default;
+const opencodeGo = (await import('../coach/core/adapters/opencode-go.js')).default;
 const { attemptOnce } = await import('../coach/core/pipeline.js');
 const { HTTP_PROVIDERS, validateBaseUrl } = await import('../coach/core/providers.js');
 const { SYSTEM_PROMPT } = await import('../coach/core/system-prompt.js');
@@ -33,12 +36,12 @@ function fakeFetch(answers) {
   return f;
 }
 const ok = body => ({ status: 200, body });
-const env = { ANTHROPIC_API_KEY: 'sk-ant-1', OPENAI_API_KEY: 'sk-oa-1', GEMINI_API_KEY: 'AIza-1', OPENAI_COMPAT_API_KEY: 'compat-1' };
+const env = { ANTHROPIC_API_KEY: 'sk-ant-1', OPENAI_API_KEY: 'sk-oa-1', GEMINI_API_KEY: 'AIza-1', OPENAI_COMPAT_API_KEY: 'compat-1', DEEPSEEK_API_KEY: 'sk-ds-1', OPENCODE_API_KEY: 'sk-oc-1' };
 const cfgCompat = { provider: 'compatible', providerOptions: { compatible: { baseUrl: 'http://ollama.lan:11434/' } } };
 const ANSWER = '{"coach_contract":1,"nochange":true,"reading":"fine"}';
 
-test('the four HTTP adapters spawn nothing and need no runtime', () => {
-  for (const a of [anthropic, openai, gemini, compatible]) {
+test('the seven HTTP adapters spawn nothing and need no runtime', () => {
+  for (const a of [anthropic, openai, gemini, compatible, deepseek, opencode, opencodeGo]) {
     assert.equal(a.spawns, false, a.id);
     assert.equal(a.needsRuntime, false, a.id);
     assert.ok(HTTP_PROVIDERS[a.id], `${a.id} is described in core/providers.js`);
@@ -115,6 +118,47 @@ test('compatible: no endpoint configured, or no model chosen, is a clean failure
   assert.equal(noModel.code, 1);
   assert.match(noModel.stderr, /no model/);
   assert.equal(f.calls.length, 0);
+});
+
+test('DeepSeek and the two OpenCode catalogs: their own base URLs, bearer auth, max_tokens', async () => {
+  const cases = [
+    [deepseek, { DEEPSEEK_API_KEY: 'sk-ds-1' }, 'https://api.deepseek.com/v1/chat/completions'],
+    [opencode, { OPENCODE_API_KEY: 'sk-oc-1' }, 'https://opencode.ai/zen/v1/chat/completions'],
+    [opencodeGo, { OPENCODE_API_KEY: 'sk-oc-1' }, 'https://opencode.ai/zen/go/v1/chat/completions']
+  ];
+  for (const [adapter, e, url] of cases) {
+    const f = fakeFetch([ok({ choices: [{ message: { content: ANSWER }, finish_reason: 'stop' }] })]);
+    const r = await adapter.invoke({ cfg: {}, prompt: 'P', env: e, model: 'some-model', fetch: f });
+    assert.equal(r.code, 0, adapter.id);
+    const c = f.calls[0];
+    assert.equal(c.url, url, adapter.id);
+    assert.equal(c.headers.authorization, 'Bearer ' + Object.values(e)[0], adapter.id);
+    assert.equal(c.body.model, 'some-model', adapter.id);
+    assert.deepEqual(c.body.response_format, { type: 'json_object' }, adapter.id);
+    assert.ok('max_tokens' in c.body && !('max_completion_tokens' in c.body), adapter.id);
+  }
+});
+
+test('DeepSeek falls back to its default model, and its models list is read from the endpoint', async () => {
+  const f = fakeFetch([ok({ choices: [{ message: { content: ANSWER }, finish_reason: 'stop' }] })]);
+  await deepseek.invoke({ cfg: {}, prompt: 'P', env: { DEEPSEEK_API_KEY: 'sk-ds-1' }, model: null, fetch: f });
+  assert.equal(f.calls[0].body.model, HTTP_PROVIDERS.deepseek.defaultModel);
+
+  const g = fakeFetch([ok({ object: 'list', data: [{ id: 'deepseek-flash' }, { id: 'deepseek-v4-pro' }] })]);
+  const r = await deepseek.models({}, { DEEPSEEK_API_KEY: 'sk-ds-1' }, { fetch: g });
+  assert.equal(r.ok, true, r.error);
+  assert.deepEqual(r.models, ['deepseek-flash', 'deepseek-v4-pro']);
+  assert.equal(g.calls[0].url, 'https://api.deepseek.com/v1/models');
+});
+
+test('the OpenCode catalogs list their own models', async () => {
+  for (const [adapter, url] of [[opencode, 'https://opencode.ai/zen/v1/models'], [opencodeGo, 'https://opencode.ai/zen/go/v1/models']]) {
+    const g = fakeFetch([ok({ object: 'list', data: [{ id: 'minimax-m3' }, { id: 'deepseek-v4-pro' }] })]);
+    const r = await adapter.models({}, { OPENCODE_API_KEY: 'sk-oc-1' }, { fetch: g });
+    assert.equal(r.ok, true, adapter.id + ' ' + r.error);
+    assert.deepEqual(r.models, ['deepseek-v4-pro', 'minimax-m3'], adapter.id);
+    assert.equal(g.calls[0].url, url, adapter.id);
+  }
 });
 
 test('compatible: a server that rejects JSON mode gets the same request once more without it', async () => {

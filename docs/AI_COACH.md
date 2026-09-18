@@ -37,7 +37,7 @@ configuration.
 Nothing here is an environment variable or a restart — the whole point of the admin card is that
 enabling the Coach is a decision you make in the app.
 
-### With an API key (Anthropic, OpenAI, Gemini, compatible)
+### With an API key (Anthropic, OpenAI, Gemini, DeepSeek, OpenCode, compatible)
 
 **1. Get a key** from the provider's own console. For a compatible endpoint, get the URL it
 answers on instead, and a key only if it wants one.
@@ -196,7 +196,7 @@ though the admin can still set a per-profile limit if the group wants one.
 
 In instance mode it depends on what kind of credential was pasted:
 
-- **An API key** (Anthropic, OpenAI, Gemini, an OpenAI-compatible endpoint) is shared by every
+- **An API key** (Anthropic, OpenAI, Gemini, DeepSeek, OpenCode, an OpenAI-compatible endpoint) is shared by every
   profile on the instance. It is metered, issued for exactly this kind of use, and the daily
   limits in the admin card are what bound what it can spend. This is the shape a household or a
   small gym wants.
@@ -426,7 +426,7 @@ The App-Store build has no server of its own, so the Coach there is a choice mad
   syncing — **Settings → Pair the mobile app** on the site, then the address and code on the
   phone). A paired phone is an ordinary profile: the Coach runs on your server with whatever
   provider the admin configured, under the rules above, and nothing on the phone changes.
-- **Bring my own API key.** The phone calls Anthropic, OpenAI, Gemini or a compatible endpoint
+- **Bring my own API key.** The phone calls Anthropic, OpenAI, Gemini, DeepSeek, OpenCode or a compatible endpoint
   directly, with a key you paste. It runs the same payload allowlist, the same validator and
   the same single repair round as the server, in the app. The key is kept in the platform's
   secure storage — Keychain on iOS, the Keystore-backed store on Android — and never in the

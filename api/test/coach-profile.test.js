@@ -134,6 +134,8 @@ test('a profile files its own credential; another profile sees none of it, and n
   assert.equal(r.body.connected, true);
   assert.equal(r.body.provider, 'openai');
   assert.ok(r.body.providers.some(p => p.id === 'anthropic'), 'the picker offers the HTTPS providers');
+  assert.ok(r.body.providers.some(p => p.id === 'deepseek'), 'DeepSeek is one of them');
+  assert.ok(r.body.providers.some(p => p.id === 'opencode-go'), 'so is the OpenCode Go catalog');
   assert.ok(!JSON.stringify(r.body).includes('sk-oa-secret'), 'no key ever comes back');
 
   const bob = harness('bob');

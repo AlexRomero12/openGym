@@ -64,6 +64,13 @@ indica aparte (la traducción se propone en el **PR #245**).
   en `locales/es.js` (221 + las frases del registro), sin duplicados. De paso: arreglado un test
   de `coach-local` que usaba la fecha UTC y fallaba de noche en zonas GMT-negativas (ahora usa
   `todayISO()` como la app).
+- 🔌 **Proveedores nuevos: DeepSeek, OpenCode Zen y OpenCode Go.** Los tres hablan Chat Completions,
+  así que corren con la imagen por defecto (y en el móvil en modo clave propia): filas nuevas en
+  `api/coach/core/providers.js` y adaptadores `core/adapters/deepseek.js`, `opencode.js` y
+  `opencode-go.js`, registrados en `api/coach/adapters/index.js` y en `coach-local.js`. DeepSeek usa
+  `deepseek-flash` por defecto (`https://api.deepseek.com`); Zen y Go listan su propio catálogo
+  (`https://opencode.ai/zen[/go]/v1/models`) y no fijan modelo, para que un nombre retirado no sea un
+  primer intento fallido. Cubiertos en `adapters-http.test.js` (URL, bearer, `max_tokens`, listas).
 
 ## v1.3.7 — 2026-09-12
 

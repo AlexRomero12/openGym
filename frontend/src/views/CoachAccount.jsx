@@ -2,7 +2,8 @@
 //
 // Instance mode has an admin card and nothing here; profile mode flips that: the admin only
 // says "the Coach exists and each of you brings an account", and this screen is where a person
-// chooses the provider (Anthropic, OpenAI, Gemini or an OpenAI-compatible endpoint), checks
+// chooses the provider (Anthropic, OpenAI, Gemini, DeepSeek, OpenCode or an OpenAI-compatible
+// endpoint), checks
 // the key by listing the models, and files it. The key is write-only from here on — it goes to
 // the server once, is encrypted at rest, and comes back out only as the provider variable on
 // this profile's own jobs. No route can read it back, not even for the admin.

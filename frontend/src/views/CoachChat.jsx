@@ -752,7 +752,7 @@ function ConnectAccount({ nav }) {
     <Section title={t('Your own AI account')}
       footer={t('Your key is stored encrypted on this server and used only for your own Coach runs — not even the admin can read it. The requests are charged to your provider account.')}>
       <Row icon="key" iconTint="var(--acc)" title={t('Connect my account')} accessory="chevron"
-        subtitle={t('Anthropic, OpenAI, Gemini or your own compatible endpoint')}
+        subtitle={t('Anthropic, OpenAI, Gemini, DeepSeek, OpenCode or your own compatible endpoint')}
         onClick={() => nav('/coach/account', { state: { from: 'coach' } })} />
       <Row icon="info" iconTint="var(--blue)" title={t('How it works')}
         subtitle={t('Everything the Coach reads stays on this server; only what you consent to travels to your provider.')} />

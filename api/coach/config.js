@@ -64,7 +64,8 @@ export const PROVIDERS = {
     label: 'Codex (OpenAI)', runtime: 'Codex CLI',
     apiKeyEnv: 'CODEX_API_KEY', oauthEnv: null, credentialHomeEnv: 'CODEX_HOME'
   },
-  // The plain-HTTPS providers — Anthropic, OpenAI, Gemini and any OpenAI-compatible endpoint.
+  // The plain-HTTPS providers — Anthropic, OpenAI, Gemini, DeepSeek, OpenCode and any
+  // OpenAI-compatible endpoint.
   // Described once in core/providers.js so the phone's picker and this table cannot disagree.
   // They spawn nothing and need no runtime in the image: the default api image runs them.
   ...HTTP_PROVIDERS
