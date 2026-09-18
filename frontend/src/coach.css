@@ -46,14 +46,9 @@
   display:flex;align-items:center;justify-content:center;gap:10px;
   background:var(--surface);border-radius:var(--r-xl);padding:26px 18px;margin-top:4px
 }
-.ob-time input[type=time]{
-  font-size:44px;font-weight:600;letter-spacing:-.03em;background:none;border:none;color:var(--label);
-  font-variant-numeric:tabular-nums;padding:0;outline:none;text-align:center;width:auto;min-width:180px;
-  -webkit-appearance:none;appearance:none;color-scheme:dark
-}
-:root[data-theme="light"] .ob-time input[type=time]{color-scheme:light}
-.ob-time input[type=time]::-webkit-calendar-picker-indicator{display:none}
-.ob-time .ob-wheel{appearance:none;-webkit-appearance:none;background:transparent;border:0;color:var(--label);font-size:56px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.02em;padding:0 4px;text-align:center;min-width:1.6em}
+.ob-time .ob-wheel{appearance:none;-webkit-appearance:none;background:transparent;border:0;color:var(--label);font-size:56px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.02em;padding:0 4px;text-align:center;min-width:1.6em;cursor:pointer;color-scheme:dark}
+.ob-time .ob-wheel option{background:var(--surface);color:var(--label)}
+:root[data-theme="light"] .ob-time .ob-wheel{color-scheme:light}
 .ob-time .ob-time-sep{font-size:56px;font-weight:700;color:var(--label);margin:0 -2px;transform:translateY(-4px)}
 .ob-time .ob-time-l{font-size:15px;color:var(--label-2)}
 .ob-quick{display:flex;gap:7px;justify-content:center;flex-wrap:wrap;margin-top:12px}

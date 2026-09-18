@@ -45,8 +45,17 @@ const EQUIPMENT = (() => {
 })()
 
 const QUICK_MIN = [30, 45, 60, 90]
-const toHHMM = min => String(Math.floor(min / 60)).padStart(2, '0') + ':' + String(min % 60).padStart(2, '0')
-const fromHHMM = v => { const [h, m] = String(v || '').split(':').map(Number); return Number.isFinite(h) && Number.isFinite(m) ? h * 60 + m : null }
+
+/* The two duration wheels. Options are derived from the value so a stored duration that is not
+   on a five-minute step (an import, a hand-edited profile) still shows exactly what is stored:
+   a select with no matching option falls back to the first one, and a wheel that shows 00:00
+   for a session of 47 minutes is worse than no wheel at all. */
+const WHEEL = {
+  minutes: v => (v || 60) % 60,
+  hours: v => Math.floor((v || 60) / 60),
+  hourOptions: v => { const h = Math.floor((v || 60) / 60); return h > 3 ? [0, 1, 2, 3, h] : [0, 1, 2, 3] },
+  minuteOptions: v => { const m = (v || 60) % 60; const list = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]; return m % 5 ? list.concat(m) : list }
+}
 
 export default function CoachIntake() {
   const nav = useNavigate()
@@ -175,16 +184,18 @@ export default function CoachIntake() {
         <h1 className="ob-h">{t('How long is a session?')}</h1>
         <p className="ob-p">{t('The Coach fits the volume to the time you actually have, including rest between sets.')}</p>
         {/* A duration, not a clock time — so two wheels (hours, minutes in fives), never the
-            native time input, which insists on AM/PM. */}
+            native time input, which insists on AM/PM. The wheel lists what is actually there:
+            a value that does not sit on a step (an import, a hand-edited profile) adds its own
+            option instead of the select falling back to the first one and showing 00. */}
         <div className="ob-time" role="group" aria-label={t('How long is a session?')}>
-          <select className="ob-wheel" value={Math.floor((p.sessionMin || 60) / 60)}
-            onChange={e => set({ sessionMin: (+e.target.value) * 60 + ((p.sessionMin || 60) % 60) || 5 })}>
-            {[0, 1, 2, 3].map(h => <option key={h} value={h}>{String(h).padStart(2, '0')}</option>)}
+          <select className="ob-wheel" value={WHEEL.hours(p.sessionMin)}
+            onChange={e => set({ sessionMin: (+e.target.value) * 60 + WHEEL.minutes(p.sessionMin) || 5 })}>
+            {WHEEL.hourOptions(p.sessionMin).map(h => <option key={h} value={h}>{String(h).padStart(2, '0')}</option>)}
           </select>
           <span className="ob-time-sep">:</span>
-          <select className="ob-wheel" value={(p.sessionMin || 60) % 60}
-            onChange={e => set({ sessionMin: Math.floor((p.sessionMin || 60) / 60) * 60 + (+e.target.value) || 5 })}>
-            {[0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55].map(m => <option key={m} value={m}>{String(m).padStart(2, '0')}</option>)}
+          <select className="ob-wheel" value={WHEEL.minutes(p.sessionMin)}
+            onChange={e => set({ sessionMin: WHEEL.hours(p.sessionMin) * 60 + (+e.target.value) || 5 })}>
+            {WHEEL.minuteOptions(p.sessionMin).map(m => <option key={m} value={m}>{String(m).padStart(2, '0')}</option>)}
           </select>
           <span className="ob-time-l">{t('h:mm')}</span>
         </div>
