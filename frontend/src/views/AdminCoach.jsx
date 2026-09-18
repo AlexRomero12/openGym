@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useUI } from '../store/useUI.js'
+import { useStore } from '../store/useStore.js'
 import { api } from '../lib/api.js'
 import { t } from '../lib/i18n.js'
 import Icon from '../components/Icon.jsx'
@@ -35,6 +37,8 @@ const TESTING_IDS = ['fixture']
 export default function AdminCoach() {
   const toast = useUI(s => s.toast)
   const openSheet = useUI(s => s.openSheet)
+  const nav = useNavigate()
+  const refreshConfig = useStore(s => s.refreshConfig)
   const [d, setD] = useState(null)
   const [busy, setBusy] = useState(false)
   // The models the endpoint serves, fetched on demand. Seeded from the status call when the
@@ -49,8 +53,13 @@ export default function AdminCoach() {
 
   const patch = async body => {
     setBusy(true)
-    try { await api('/api/admin/coach/config', { method: 'POST', body: JSON.stringify(body) }); await load() }
-    catch (e) { toast(e.message) }
+    try {
+      await api('/api/admin/coach/config', { method: 'POST', body: JSON.stringify(body) })
+      await load()
+      // The rest of the app hangs off /api/config, which it caches from boot: the master switch
+      // and the account mode must reach Settings and the Plan CTA without a page reload.
+      refreshConfig().catch(() => {})
+    } catch (e) { toast(e.message) }
     setBusy(false)
   }
   const loadModels = async () => {
@@ -284,6 +293,9 @@ export default function AdminCoach() {
         <div className="adm-kv" style={{ marginTop: 10 }}>
           <span className="k">{t('Profiles connected')}</span>
           <span className="v">{t('{0} of {1}', d.profiles?.connected || 0, d.profiles?.total || 0)}</span>
+        </div>
+        <div className="adm-actions" style={{ marginTop: 10 }}>
+          <Button size="sm" variant="tinted" icon="key" disabled={busy} onClick={() => nav('/coach/account')}>{t('Open my AI account')}</Button>
         </div>
         <div className="adm-hint" style={{ margin: '8px 0 0' }}>{t('Counts only. What each person asked the Coach, and the keys they filed, never appear here — a profile key is stored encrypted and no route reads it back.')}</div>
       </div>}

@@ -1452,6 +1452,7 @@ export default {
   'Profiles connected': 'Perfiles conectados',
   '{0} of {1}': '{0} de {1}',
   'Counts only. What each person asked the Coach, and the keys they filed, never appear here — a profile key is stored encrypted and no route reads it back.': 'Solo contadores. Lo que cada persona le preguntó al entrenador y las claves que guardó nunca aparecen aquí: la clave de un perfil se guarda cifrada y ninguna ruta la devuelve.',
+  'Open my AI account': 'Abrir mi cuenta de IA',
   'Advanced': 'Avanzado',
   'With each profile on their own account there is nothing of yours to bound, so both limits start at 0 (no limit). Set one anyway if you want to cap how much the group can run in a day.': 'Con cada perfil en su propia cuenta no hay nada tuyo que limitar, así que ambos topes empiezan en 0 (sin límite). Pon uno igualmente si quieres acotar cuánto puede correr el grupo al día.',
   'How many Coach runs are allowed per day. Every run is one request on the provider account above. 0 means no limit.': 'Cuántas consultas al entrenador se permiten al día. Cada consulta es una solicitud a la cuenta de proveedor de arriba. 0 significa sin límite.',
