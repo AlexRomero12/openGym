@@ -18,6 +18,7 @@
 import * as payloadLib from '../../../api/coach/core/payload.js'
 import { runPipeline } from '../../../api/coach/core/pipeline.js'
 import { HTTP_PROVIDERS, baseUrlFor } from '../../../api/coach/core/providers.js'
+import { gatewayHeaders } from '../../../api/coach/core/gateway-headers.js'
 import anthropic from '../../../api/coach/core/adapters/anthropic.js'
 import openai from '../../../api/coach/core/adapters/openai.js'
 import gemini from '../../../api/coach/core/adapters/gemini.js'
@@ -150,7 +151,9 @@ async function run(S, kind, opts, d, adapter) {
   const attempt = await runPipeline({
     adapter, cfg: cfgOf(d), kind, payload,
     model: d.model || HTTP_PROVIDERS[d.provider].defaultModel, timeoutMs: timeoutFor(d.provider),
-    invokeOpts: { env: envOf(d, key), fetch: nativeFetch }
+    // The OpenCode gateways want a client identity and a stable session; the device handle is
+    // that session, minted once and kept in the device file.
+    invokeOpts: { env: envOf(d, key), fetch: nativeFetch, ...(gatewayHeaders(d.provider, await handle()) || {}) }
   })
   if (!attempt.ok) {
     // There is no admin card on a phone, so the reason has to reach the person holding it:

@@ -115,7 +115,7 @@ export function httpAdapter(spec) {
      * native HTTP and a test can hand in a fake.
      */
     async invoke(opts = {}) {
-      const { cfg, prompt, system, schema, env, model, timeoutMs = DEFAULT_TIMEOUT_MS, fetch: fetchImpl = globalThis.fetch, signal } = opts;
+      const { cfg, prompt, system, schema, env, model, timeoutMs = DEFAULT_TIMEOUT_MS, fetch: fetchImpl = globalThis.fetch, signal, headers: extraHeaders } = opts;
       const base = adapter.baseUrl(cfg);
       if (!base) return { code: -1, text: '', stderr: `no endpoint configured for ${id}`, spawnError: true };
       const key = keyOf(env);
@@ -131,7 +131,7 @@ export function httpAdapter(spec) {
         try {
           res = await call(fetchImpl, base + spec.path(chosen), {
             method: 'POST',
-            headers: { 'content-type': 'application/json', ...spec.headers(key) },
+            headers: { 'content-type': 'application/json', ...spec.headers(key), ...(extraHeaders || {}) },
             body: JSON.stringify(body)
           }, timeoutMs, signal);
         } catch (e) {

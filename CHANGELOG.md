@@ -71,6 +71,13 @@ indica aparte (la traducción se propone en el **PR #245**).
   `deepseek-flash` por defecto (`https://api.deepseek.com`); Zen y Go listan su propio catálogo
   (`https://opencode.ai/zen[/go]/v1/models`) y no fijan modelo, para que un nombre retirado no sea un
   primer intento fallido. Cubiertos en `adapters-http.test.js` (URL, bearer, `max_tokens`, listas).
+- 🩺 **OpenCode Go funcionaba con 400: faltaba la sesión.** El gateway exige que el cliente se
+  identifique (`user-agent` propio) y mande una sesión estable en `x-opencode-session`; sin eso
+  responde *"Request is missing x-opencode-session"* y el usuario lee «mi clave no funciona».
+  Ahora `api/coach/core/gateway-headers.js` arma ambos encabezados y los usan el server
+  (`jobs.js`, la sesión es el seudónimo del perfil) y el móvil (`coach-local.js`, el handle del
+  dispositivo). Validado contra el gateway real con la credencial de Alex (`glm-5.3-flash`):
+  con headers responde `{"coach_contract":1,"ok":true}`; sin ellos, el 400.
 
 ## v1.3.7 — 2026-09-12
 

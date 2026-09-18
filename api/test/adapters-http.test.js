@@ -161,6 +161,23 @@ test('the OpenCode catalogs list their own models', async () => {
   }
 });
 
+test('extra headers ride along — the OpenCode session Go refuses to answer without', async () => {
+  const { gatewayHeaders } = await import('../coach/core/gateway-headers.js');
+  assert.equal(gatewayHeaders('deepseek', 's'), null, 'only the OpenCode gateways ask for this');
+  const h = gatewayHeaders('opencode-go', 'AbCd1234');
+  assert.equal(h['x-opencode-session'], 'AbCd1234');
+  assert.match(h['user-agent'], /^openGym-/, 'the client identifies itself, not as a library');
+
+  const f = fakeFetch([ok({ choices: [{ message: { content: ANSWER }, finish_reason: 'stop' }] })]);
+  const r = await opencodeGo.invoke({ cfg: {}, prompt: 'P', env: { OPENCODE_API_KEY: 'sk-oc-1' }, model: 'glm-5.3-flash', fetch: f, headers: h });
+  assert.equal(r.code, 0, r.stderr);
+  const c = f.calls[0];
+  assert.equal(c.headers['x-opencode-session'], 'AbCd1234');
+  assert.match(c.headers['user-agent'], /^openGym-/);
+  assert.equal(c.headers.authorization, 'Bearer sk-oc-1');
+  assert.equal(c.headers['content-type'], 'application/json');
+});
+
 test('compatible: a server that rejects JSON mode gets the same request once more without it', async () => {
   const f = fakeFetch(n => n === 1
     ? { status: 400, body: { error: { message: 'response_format is not supported' } } }

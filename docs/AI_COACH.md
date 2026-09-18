@@ -57,6 +57,12 @@ answers on instead, and a key only if it wants one.
   none, because it serves whatever you put behind it.
 - **Test the Coach** — a real round trip with no user data anywhere near it.
 
+**OpenCode Go** asks a client to identify itself and to keep a stable session id, and answers
+400 without one (`x-opencode-session`; see *Where can I use it* in its docs). The Coach sends
+both header values — a `openGym-coach/1.0` user agent and, as the session, the profile's payload
+pseudonym, so routing and prompt caching stay per-person without naming them. That is all it
+takes; the key is the same one you use in OpenCode.
+
 The card says two things worth reading: which account is being spent, and — for these
 providers — that jobs run no child process at all, so the privilege-drop line reads as not
 applicable rather than as a problem.

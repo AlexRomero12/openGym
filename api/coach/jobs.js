@@ -23,6 +23,7 @@ import { runPipeline } from './core/pipeline.js';
 import { extractJSON } from './core/parse.js';
 import { hashPlan } from './core/plan-hash.js';
 import { buildPrompt } from './core/prompt.js';
+import { gatewayHeaders } from './core/gateway-headers.js';
 import { handleFor } from './handle.js';
 import { fetchFor } from './node-fetch.js';
 import { canDropPrivileges, unprivilegedIds } from './adapters/spawn.js';
@@ -345,11 +346,15 @@ async function execute(job) {
     const ids = jobDir && unprivilegedIds();
     if (ids) shareJobDir(jobDir, ids);
 
+    // The gateways that ask a client to identify itself and keep a stable session (OpenCode Go)
+    // get both: the payload pseudonym is the session, so routing and prompt caching stay
+    // per-person without ever naming them.
+    const gw = gatewayHeaders(eff.provider, handleFor(job.uid));
     const attempt = await runPipeline({
       adapter, cfg: jobCfg, kind: job.kind, payload, model: eff.model, timeoutMs: TIMEOUT_MS,
       // The HTTP adapters take the fetch and the abort signal they are given; the runtime
       // adapters ignore both.
-      invokeOpts: { jobDir, env, fetch: fetchFor(TIMEOUT_MS), signal: ctl.signal }
+      invokeOpts: { jobDir, env, fetch: fetchFor(TIMEOUT_MS), signal: ctl.signal, ...(gw ? { headers: gw } : {}) }
     });
     if (!attempt.ok) {
       // Cancelled by a forget, not failed by the provider: the log must not blame the job budget.
@@ -456,8 +461,10 @@ export async function testRun() {
     if (ids) shareJobDir(jobDir, ids);
     const check = await adapter.check(cfg, env);
     if (!check.ok) return { ok: false, error: check.error || 'the provider runtime could not be run' };
+    const gw = gatewayHeaders(cfg.provider, 'opengym-admin-test');
     const r = await adapter.invoke({
       cfg, jobDir, env, model: cfgStore.modelFor(cfg), timeoutMs: 90000, fetch: fetchFor(90000),
+      ...(gw ? { headers: gw } : {}),
       prompt: 'Reply with exactly this JSON object and nothing else: {"coach_contract":1,"ok":true}'
     });
     if (r.timedOut) return { ok: false, version: check.version, error: 'the provider did not answer in time' };
