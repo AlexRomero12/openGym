@@ -197,9 +197,20 @@ test('DeepSeek reasoning is off by default, and an effort turns it back on', asy
     assert.equal(h.calls[0].body.reasoning_effort, 'low', adapter.id);
   }
 
+  // GLM through the same gateway: reasoning_effort, with `none` when off (its default here).
+  for (const adapter of [opencode, opencodeGo]) {
+    const g1 = fakeFetch([ok({ choices: [{ message: { content: ANSWER }, finish_reason: 'stop' }] })]);
+    await adapter.invoke({ cfg: {}, prompt: 'P', env: { OPENCODE_API_KEY: 'sk-oc-1' }, model: 'glm-5.3-flash', fetch: g1 });
+    assert.equal(g1.calls[0].body.reasoning_effort, 'none', adapter.id);
+
+    const g2 = fakeFetch([ok({ choices: [{ message: { content: ANSWER }, finish_reason: 'stop' }] })]);
+    await adapter.invoke({ cfg: {}, prompt: 'P', env: { OPENCODE_API_KEY: 'sk-oc-1' }, model: 'glm-5.3-flash', effort: 'medium', fetch: g2 });
+    assert.equal(g2.calls[0].body.reasoning_effort, 'medium', adapter.id);
+  }
+
   // Another vendor's model on the same gateway gets nothing extra: it has its own knobs.
   const h = fakeFetch([ok({ choices: [{ message: { content: ANSWER }, finish_reason: 'stop' }] })]);
-  await opencodeGo.invoke({ cfg: {}, prompt: 'P', env: { OPENCODE_API_KEY: 'sk-oc-1' }, model: 'glm-5.3-flash', effort: 'high', fetch: h });
+  await opencodeGo.invoke({ cfg: {}, prompt: 'P', env: { OPENCODE_API_KEY: 'sk-oc-1' }, model: 'kimi-k2.6', effort: 'high', fetch: h });
   assert.equal('thinking' in h.calls[0].body, false);
   assert.equal('reasoning_effort' in h.calls[0].body, false);
 });

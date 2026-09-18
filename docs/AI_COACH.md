@@ -63,15 +63,17 @@ both header values — a `openGym-coach/1.0` user agent and, as the session, the
 pseudonym, so routing and prompt caching stay per-person without naming them. That is all it
 takes; the key is the same one you use in OpenCode.
 
-**Effort, where the model has one.** DeepSeek, OpenAI and Gemini all reason before answering,
-and they reason by default: on a 16k output budget the thinking ate the answer (jobs came back
-*cut off at the output limit*, or unusable) and every request took minutes. The account screen —
-and the admin card for instance mode — offers the levels the chosen model actually accepts and
-stores the pick next to the credential: DeepSeek `off`/`low`/`medium`/`high`/`max` (off is its
-default here), OpenAI `minimal`–`high`, Gemini `low`–`high` (`low` by default), and the OpenCode
-gateways offer them for their DeepSeek models only. What a model does not take is never sent:
-the server refuses an effort the model does not accept, so a 400 from a wrong parameter cannot
-happen. Gemini's reasoning parts are filtered out of the answer for the same reason.
+**Effort, where the model has one.** DeepSeek, OpenAI, Gemini and the OpenCode gateway's
+DeepSeek and GLM models all reason before answering, and they reason by default: on a 16k output
+budget the thinking ate the answer (jobs came back *cut off at the output limit*, or unusable)
+and every request took minutes. The account screen — and the admin card for instance mode —
+offers the levels the chosen model actually accepts and stores the pick next to the credential:
+DeepSeek `off`/`low`/`medium`/`high`/`max` (off is its default here), OpenAI `minimal`–`high`,
+Gemini `low`–`high` (`low` by default), and the OpenCode gateways for their DeepSeek and GLM
+models (`off` by default). What a model does not take is never sent: the server refuses an
+effort the model does not accept, so a 400 from a wrong parameter cannot happen. On the gateway,
+DeepSeek takes `thinking`/`reasoning_effort` and GLM takes `reasoning_effort` (`none` stops its
+thinking); Gemini's reasoning parts are filtered out of the answer.
 
 The card says two things worth reading: which account is being spent, and — for these
 providers — that jobs run no child process at all, so the privilege-drop line reads as not

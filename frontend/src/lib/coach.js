@@ -604,11 +604,15 @@ export const exTitle = exName
 
 /** The effort values a provider's metadata allows for a given model — empty when the model has
  *  no such control (or the control is a gateway's and belongs to another vendor's models). */
-export const effortsForProvider = (meta, model) => (
-  meta?.efforts && (!meta.effortsForModels || String(model || '').toLowerCase().startsWith(meta.effortsForModels))
-    ? meta.efforts
-    : []
-)
+export const effortsForProvider = (meta, model) => {
+  if (!meta?.efforts) return []
+  if (meta.effortsForModels) {
+    const prefixes = [].concat(meta.effortsForModels)
+    const m = String(model || '').toLowerCase()
+    if (!prefixes.some(p => m.startsWith(p))) return []
+  }
+  return meta.efforts
+}
 /** One label per effort id, in the user's language. */
 export const effortLabel = id => ({
   off: t('Off (fastest)'), minimal: t('Minimal'), low: t('Low'), medium: t('Medium'), high: t('High'), max: t('Max')

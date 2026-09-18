@@ -66,7 +66,7 @@ export const HTTP_PROVIDERS = Object.freeze({
     defaultBase: 'https://opencode.ai/zen',
     defaultModel: null,
     keyPlaceholder: 'sk-…',
-    efforts: ['off', 'low', 'medium', 'high', 'max'], defaultEffort: 'off', effortsForModels: 'deepseek'
+    efforts: ['off', 'minimal', 'low', 'medium', 'high', 'max'], defaultEffort: 'off', effortsForModels: ['deepseek', 'glm']
   }),
   'opencode-go': Object.freeze({
     label: 'OpenCode Go', runtime: 'HTTPS', http: true,
@@ -74,7 +74,7 @@ export const HTTP_PROVIDERS = Object.freeze({
     defaultBase: 'https://opencode.ai/zen/go',
     defaultModel: null,
     keyPlaceholder: 'sk-…',
-    efforts: ['off', 'low', 'medium', 'high', 'max'], defaultEffort: 'off', effortsForModels: 'deepseek'
+    efforts: ['off', 'minimal', 'low', 'medium', 'high', 'max'], defaultEffort: 'off', effortsForModels: ['deepseek', 'glm']
   })
 });
 
@@ -82,12 +82,16 @@ export const HTTP_PROVIDER_IDS = Object.freeze(Object.keys(HTTP_PROVIDERS));
 
 /** The efforts a provider's current model accepts — empty when it has no such control, or when
  *  the control belongs to some models of a multi-vendor gateway and this is not one of them.
- *  `effortsForModels` is a lowercase model prefix so it can travel to the setup screen as-is
- *  (a regex is not JSON), keeping the rule in one place. */
+ *  `effortsForModels` is a lowercase model prefix (or a list of them) so it can travel to the
+ *  setup screen as-is (a regex is not JSON), keeping the rule in one place. */
 export function effortsFor(id, model) {
   const meta = HTTP_PROVIDERS[id];
   if (!meta || !meta.efforts) return [];
-  if (meta.effortsForModels && !String(model || '').toLowerCase().startsWith(meta.effortsForModels)) return [];
+  if (meta.effortsForModels) {
+    const prefixes = [].concat(meta.effortsForModels);
+    const m = String(model || '').toLowerCase();
+    if (!prefixes.some(p => m.startsWith(p))) return [];
+  }
   return meta.efforts;
 }
 

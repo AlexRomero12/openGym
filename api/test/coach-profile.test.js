@@ -188,8 +188,8 @@ test('the effort is stored, validated against the model, kept on a re-save and c
   fresh();
   const alice = harness('alice');
 
-  // The gateway takes an effort only for its DeepSeek models — anything else is refused.
-  let r = await alice('POST /api/coach/credential', { provider: 'opencode-go', key: 'sk-oc-1', model: 'glm-5.3-flash', effort: 'high' });
+  // The gateway takes an effort for its DeepSeek and GLM models — anything else is refused.
+  let r = await alice('POST /api/coach/credential', { provider: 'opencode-go', key: 'sk-oc-1', model: 'kimi-k2.6', effort: 'high' });
   assert.equal(r.status, 400);
   r = await alice('POST /api/coach/credential', { provider: 'opencode-go', key: 'sk-oc-1', model: 'deepseek-v4.1-flash', effort: 'high' });
   assert.equal(r.status, 200, JSON.stringify(r.body));
@@ -199,8 +199,8 @@ test('the effort is stored, validated against the model, kept on a re-save and c
   r = await alice('GET /api/coach/setup');
   assert.equal(r.body.effort, 'high');
   const gw = r.body.providers.find(p => p.id === 'opencode-go');
-  assert.deepEqual(gw.efforts, ['off', 'low', 'medium', 'high', 'max']);
-  assert.equal(gw.effortsForModels, 'deepseek');
+  assert.deepEqual(gw.efforts, ['off', 'minimal', 'low', 'medium', 'high', 'max']);
+  assert.deepEqual(gw.effortsForModels, ['deepseek', 'glm']);
 
   // Editing the model keeps what was filed; clearing the effort falls back to the default.
   await alice('POST /api/coach/credential', { provider: 'opencode-go', model: 'deepseek-v4.1-flash' });
