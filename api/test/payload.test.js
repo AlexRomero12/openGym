@@ -154,6 +154,30 @@ test('equipment nobody in the library has still yields a usable library', () => 
   assert.ok(payload.librarySlice({}, ['moon rocks']).length > 0);
 });
 
+test('the names inside the payload follow meta.lang — the model echoes what it is given', async () => {
+  const { EXERCISE_NAMES } = await import('../coach/core/exercise-names.js');
+  const es = EXERCISE_NAMES.es;
+  const S = { ...sampleState(), lang: 'es' };
+
+  const p = payload.build(S, { handle: handleFor('uid-es'), kind: 'review' });
+  assert.equal(p.meta.lang, 'es');
+  // Plan, library and window entries all name the same exercise the way a Spanish lifter does.
+  assert.equal(p.plan.routines[0].ex[0].name, es['0001']);
+  assert.equal(p.library.find(e => e.id === '0001')?.n, es['0001']);
+  assert.equal(p.window.workouts[0].entries[0].name, es['0001']);
+
+  // English is still the default: an untouched payload keeps the catalogue's names.
+  const en = payload.build(sampleState(), { handle: handleFor('uid-en'), kind: 'review' });
+  assert.equal(en.plan.routines[0].ex[0].name, '3/4 sit-up');
+
+  // A debrief names its session the same way.
+  const d = payload.build(S, { handle: handleFor('uid-es'), kind: 'debrief', workoutId: 'w1' });
+  assert.equal(d.session.entries[0].name, es['0001']);
+  // A custom exercise keeps the name its owner gave it, in whatever language that is.
+  const custom = payload.build(sampleState({ customEx: [{ id: 'cx1', n: 'Sandbag carry', bp: 'back' }], lang: 'es' }), { handle: handleFor('uid-es'), kind: 'review' });
+  assert.equal(custom.library.find(e => e.id === 'cx1')?.n, 'Sandbag carry');
+});
+
 test('declined changes are carried forward so the Coach does not nag', () => {
   const S = sampleState();
   S.coach.log = [{ decisions: [{ status: 'rejected', type: 'sets', why: 'bench accessory volume -1 set' }] }];

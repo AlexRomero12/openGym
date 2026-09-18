@@ -6,12 +6,18 @@
  * needs an import attribute, and this file has to load under both without either knowing.
  */
 import { EXERCISES } from './library-data.js';
+import { EXERCISE_NAMES } from './exercise-names.js';
 
 export const LIBRARY = EXERCISES;
 export const LIB_BY_ID = new Map(LIBRARY.map(e => [e.id, e]));
 
 export const libraryHas = id => LIB_BY_ID.has(id);
-export const libraryName = id => LIB_BY_ID.get(id)?.n || null;
+/* The name as the lifter knows it: the curated translated pack when the payload's language has
+   one, the catalogue's English otherwise. The catalogue stays the source of ids; this only
+   changes what the model reads and therefore writes back — a Spanish answer that calls
+   everything "barbell romanian deadlift" is half a translation. */
+export const libraryName = (id, lang) =>
+  (lang && lang !== 'en' ? EXERCISE_NAMES[lang]?.[id] : null) || LIB_BY_ID.get(id)?.n || null;
 
 /* ---------- the library slice the model gets to choose from ----------
    Bounded. The whole catalogue is 1,324 rows — 10k+ tokens on every job, which costs real money
@@ -24,9 +30,15 @@ export const MAX_LIBRARY = 160;
 
 // What one library entry tells the model: enough to pick it, nothing more. The taxonomy
 // fields beyond body part never appear in a rationale and cost ~30 tokens an entry.
-const slim = e => ({ id: e.id, n: e.n, bp: e.bp, ...(e.custom ? { custom: true } : {}) });
+const slim = (e, lang) => ({
+  id: e.id,
+  // Custom exercises carry their own name; catalogue entries take the payload's language.
+  n: e.custom ? e.n : (libraryName(e.id, lang) || e.n),
+  bp: e.bp,
+  ...(e.custom ? { custom: true } : {})
+});
 
-export function librarySlice(S, equipment, { keep = [], max = MAX_LIBRARY } = {}) {
+export function librarySlice(S, equipment, { keep = [], max = MAX_LIBRARY, lang } = {}) {
   const wanted = (equipment || []).map(x => String(x).toLowerCase());
   const customs = (S.customEx || []).map(c => ({ id: c.id, n: c.n, bp: c.bp, tg: null, eq: 'custom', custom: true }));
   // No equipment stated (or "everything") ⇒ the whole catalogue. Filtering to nothing would
@@ -59,5 +71,5 @@ export function librarySlice(S, equipment, { keep = [], max = MAX_LIBRARY } = {}
       }
     }
   }
-  return [...customs, ...out].map(slim);
+  return [...customs, ...out].map(e => slim(e, lang));
 }

@@ -83,8 +83,8 @@ export function stallCount(sessions) {
 }
 
 /* ---------- plan cleaning (mirrors plan-share.js cleanEx) ---------- */
-function cleanEx(e) {
-  const o = { id: e.id, name: LIB_BY_ID.get(e.id)?.n || null, sets: e.sets };
+function cleanEx(e, lang) {
+  const o = { id: e.id, name: libraryName(e.id, lang), sets: e.sets };
   const mode = modeOf(e, LIB_BY_ID.get(e.id));
   o.mode = mode;
   if (mode === 'cardio') { if (e.min != null) o.min = e.min; if (e.speed != null) o.speed = e.speed; }
@@ -143,9 +143,9 @@ export function canonicalPlan(S) {
   };
 }
 
-export function cleanPlan(S) {
+export function cleanPlan(S, lang) {
   const routines = (S.routines || []).map(r => ({
-    id: r.id, name: r.name, emoji: r.emoji, ...(r.prog ? { prog: r.prog } : {}), ex: (r.ex || []).map(cleanEx)
+    id: r.id, name: r.name, emoji: r.emoji, ...(r.prog ? { prog: r.prog } : {}), ex: (r.ex || []).map(e => cleanEx(e, lang))
   }));
   const week = {};
   [1, 2, 3, 4, 5, 6, 0].forEach(d => { if (S.week?.[d]?.length) week[d] = [].concat(S.week[d]); });
@@ -172,7 +172,7 @@ export function reviewWindow(S, since) {
   return all.filter(w => w.d >= from).slice(-MAX_SESSIONS);
 }
 
-function aggregates(S, workouts) {
+function aggregates(S, workouts, lang) {
   // Per-exercise stall/deload picture, computed over the same sessions the engine would see.
   const byEx = new Map();
   const planCfg = new Map();
@@ -186,7 +186,7 @@ function aggregates(S, workouts) {
   for (const [id, sessions] of byEx) {
     const stalls = stallCount(sessions);
     if (stalls > 0 || sessions.length >= 3) {
-      exercises.push({ id, name: libraryName(id), sessions: sessions.length, stalls, lastOk: !!sessions[sessions.length - 1]?.ok });
+      exercises.push({ id, name: libraryName(id, lang), sessions: sessions.length, stalls, lastOk: !!sessions[sessions.length - 1]?.ok });
     }
   }
 
@@ -239,7 +239,7 @@ const fmtSet = s => {
 };
 
 /** One older workout as a summary: what was done, the top set, whether targets were hit. */
-function compactWorkout(w) {
+function compactWorkout(w, lang) {
   return {
     d: w.d,
     name: w.name || null,
@@ -255,7 +255,7 @@ function compactWorkout(w) {
       });
       return {
         id: en.id,
-        name: libraryName(en.id),
+        name: libraryName(en.id, lang),
         done: done.length + '/' + sets.length,
         ...(en.target ? { target: fmtSet({ w: en.target.weight, r: en.target.reps, sec: en.target.sec }) } : {}),
         ...(top ? { top: fmtSet(top) } : {})
@@ -265,7 +265,7 @@ function compactWorkout(w) {
 }
 
 /** One workout, reduced to what a coach reads. */
-function cleanWorkout(w) {
+function cleanWorkout(w, lang) {
   return {
     d: w.d,
     name: w.name || null,
@@ -275,7 +275,7 @@ function cleanWorkout(w) {
     prs: (w.prs || []).length,
     entries: (w.entries || []).map(en => ({
       id: en.id,
-      name: libraryName(en.id),
+      name: libraryName(en.id, lang),
       target: en.target ? { sets: en.target.sets, reps: en.target.reps, sec: en.target.sec, weight: en.target.weight } : null,
       sets: (en.sets || []).map(s => {
         const o = { done: !!s.done };
@@ -332,12 +332,16 @@ export function build(S, opts = {}) {
   if (typeof opts.handle !== 'string' || !opts.handle) throw new Error('payload.build: opts.handle is required');
   const coach = S.coach || {};
   const profile = opts.intake || coach.profile || null;
+  // The language travels with the payload because the names inside it do: the model echoes the
+  // library it is given, so a Spanish lifter gets Spanish exercise names rather than the
+  // catalogue's English ones.
+  const lang = S.lang || 'en';
   const p = {
     coach_contract: CONTRACT,
     task: opts.kind === 'review' ? 'review' : opts.kind === 'debrief' ? 'debrief' : 'create',
     meta: {
       profile: opts.handle,
-      lang: S.lang || 'en',
+      lang,
       unit: S.unit || 'kg',
       effortScale: effortOf(S),
       today: iso(new Date())
@@ -354,7 +358,7 @@ export function build(S, opts = {}) {
       dislikes: profile.dislikes || '',
       notes: profile.notes || ''
     } : null,
-    plan: cleanPlan(S)
+    plan: cleanPlan(S, lang)
   };
 
   // What the user already turned down, so the Coach does not re-propose it without new
@@ -373,10 +377,10 @@ export function build(S, opts = {}) {
       const all = (S.workouts || []).filter(x => x && x.d);
       const idx = all.indexOf(w);
       const previous = all.slice(0, idx).filter(x => x.name && x.name === w.name).slice(-3);
-      p.session = { id: w.id || null, ...cleanWorkout(w) };
-      p.previous = previous.map(cleanWorkout);
+      p.session = { id: w.id || null, ...cleanWorkout(w, lang) };
+      p.previous = previous.map(x => cleanWorkout(x, lang));
       const inSession = new Set((w.entries || []).map(en => en.id));
-      const agg = aggregates(S, [w]);
+      const agg = aggregates(S, [w], lang);
       p.aggregates = { ...agg, exercises: agg.exercises.filter(e => inSession.has(e.id)) };
       const since = new Date(w.d + 'T12:00:00'); since.setDate(since.getDate() - 28);
       const from = iso(since);
@@ -392,9 +396,9 @@ export function build(S, opts = {}) {
     p.window = {
       from: workouts[0]?.d || null,
       to: workouts[workouts.length - 1]?.d || null,
-      workouts: workouts.map((w, i) => (i >= detailFrom ? cleanWorkout(w) : compactWorkout(w)))
+      workouts: workouts.map((w, i) => (i >= detailFrom ? cleanWorkout(w, lang) : compactWorkout(w, lang)))
     };
-    p.aggregates = aggregates(S, workouts);
+    p.aggregates = aggregates(S, workouts, lang);
     p.bodyweight = {
       goal: S.targetW ?? null,
       series: (S.bodyweight || []).filter(b => !p.window.from || b.d >= p.window.from).map(b => ({ d: b.d, w: b.w }))
@@ -402,9 +406,9 @@ export function build(S, opts = {}) {
     if (opts.note) p.userNote = String(opts.note).slice(0, 1000);
     if (opts.cohort) p.cohort = opts.cohort;
     // A review names mostly what is already trained; 60 candidates is plenty for a swap.
-    p.library = librarySlice(S, profile?.equipment, { keep: trainedIds(S, workouts), max: 60 });
+    p.library = librarySlice(S, profile?.equipment, { keep: trainedIds(S, workouts), max: 60, lang });
   } else {
-    p.library = librarySlice(S, profile?.equipment, { keep: trainedIds(S, S.workouts || []) });
+    p.library = librarySlice(S, profile?.equipment, { keep: trainedIds(S, S.workouts || []), lang });
     // Creation for a returning user: what they have actually handled, so proposed baselines
     // start from evidence rather than optimism (B2/FR-20).
     const best = {};
@@ -415,7 +419,7 @@ export function build(S, opts = {}) {
       p.history = {
         sessions: (S.workouts || []).length,
         since: (S.workouts || [])[0]?.d || null,
-        workingWeights: Object.entries(best).map(([id, w]) => ({ id, name: libraryName(id), best: w }))
+        workingWeights: Object.entries(best).map(([id, w]) => ({ id, name: libraryName(id, lang), best: w }))
       };
     }
     if (opts.refine && opts.previous) {
