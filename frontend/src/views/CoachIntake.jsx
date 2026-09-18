@@ -200,7 +200,7 @@ export default function CoachIntake() {
           <span className="ob-time-l">{t('h:mm')}</span>
         </div>
         <div className="ob-quick">
-          {QUICK_MIN.map(m => <button key={m} className={'chip' + (p.sessionMin === m ? ' on' : '')} onClick={() => set({ sessionMin: m })}>{m} {t('min')}</button>)}
+          {QUICK_MIN.map(m => <button key={m} className={'chip nocap' + (p.sessionMin === m ? ' on' : '')} onClick={() => set({ sessionMin: m })}>{m} {t('min')}</button>)}
         </div>
       </>}
 
@@ -209,7 +209,7 @@ export default function CoachIntake() {
         <h1 className="ob-h">{t('What can you train with?')}</h1>
         <p className="ob-p">{t('Pick everything you have access to. Leave it empty and the Coach will use the whole library.')}</p>
         <div className="ob-chips">
-          {EQUIPMENT.map(e => <button key={e} className={'chip' + (p.equipment.includes(e) ? ' on' : '')} onClick={() => toggleEq(e)}>{e}</button>)}
+          {EQUIPMENT.map(e => <button key={e} className={'chip nocap' + (p.equipment.includes(e) ? ' on' : '')} onClick={() => toggleEq(e)}>{t(e)}</button>)}
         </div>
       </>}
 
