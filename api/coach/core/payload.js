@@ -83,8 +83,14 @@ export function stallCount(sessions) {
 }
 
 /* ---------- plan cleaning (mirrors plan-share.js cleanEx) ---------- */
-function cleanEx(e, lang) {
-  const o = { id: e.id, name: libraryName(e.id, lang), sets: e.sets };
+
+/** The name as the model should read it: the catalogue's (in the payload's language) or the
+ *  profile's own custom exercise. A custom exercise has no catalogue entry, and a `null` name in
+ *  an answer is worse than useless — the model ends up writing "null" at the lifter. */
+const nameFor = (S, id, lang) => libraryName(id, lang) || (S?.customEx || []).find(c => c.id === id)?.n || null;
+
+function cleanEx(e, lang, S) {
+  const o = { id: e.id, name: nameFor(S, e.id, lang), sets: e.sets };
   const mode = modeOf(e, LIB_BY_ID.get(e.id));
   o.mode = mode;
   if (mode === 'cardio') { if (e.min != null) o.min = e.min; if (e.speed != null) o.speed = e.speed; }
@@ -145,7 +151,7 @@ export function canonicalPlan(S) {
 
 export function cleanPlan(S, lang) {
   const routines = (S.routines || []).map(r => ({
-    id: r.id, name: r.name, emoji: r.emoji, ...(r.prog ? { prog: r.prog } : {}), ex: (r.ex || []).map(e => cleanEx(e, lang))
+    id: r.id, name: r.name, emoji: r.emoji, ...(r.prog ? { prog: r.prog } : {}), ex: (r.ex || []).map(e => cleanEx(e, lang, S))
   }));
   const week = {};
   [1, 2, 3, 4, 5, 6, 0].forEach(d => { if (S.week?.[d]?.length) week[d] = [].concat(S.week[d]); });
@@ -186,7 +192,7 @@ function aggregates(S, workouts, lang) {
   for (const [id, sessions] of byEx) {
     const stalls = stallCount(sessions);
     if (stalls > 0 || sessions.length >= 3) {
-      exercises.push({ id, name: libraryName(id, lang), sessions: sessions.length, stalls, lastOk: !!sessions[sessions.length - 1]?.ok });
+      exercises.push({ id, name: nameFor(S, id, lang), sessions: sessions.length, stalls, lastOk: !!sessions[sessions.length - 1]?.ok });
     }
   }
 
@@ -239,7 +245,7 @@ const fmtSet = s => {
 };
 
 /** One older workout as a summary: what was done, the top set, whether targets were hit. */
-function compactWorkout(w, lang) {
+function compactWorkout(S, w, lang) {
   return {
     d: w.d,
     name: w.name || null,
@@ -255,7 +261,7 @@ function compactWorkout(w, lang) {
       });
       return {
         id: en.id,
-        name: libraryName(en.id, lang),
+        name: nameFor(S, en.id, lang),
         done: done.length + '/' + sets.length,
         ...(en.target ? { target: fmtSet({ w: en.target.weight, r: en.target.reps, sec: en.target.sec }) } : {}),
         ...(top ? { top: fmtSet(top) } : {})
@@ -265,7 +271,7 @@ function compactWorkout(w, lang) {
 }
 
 /** One workout, reduced to what a coach reads. */
-function cleanWorkout(w, lang) {
+function cleanWorkout(S, w, lang) {
   return {
     d: w.d,
     name: w.name || null,
@@ -275,7 +281,7 @@ function cleanWorkout(w, lang) {
     prs: (w.prs || []).length,
     entries: (w.entries || []).map(en => ({
       id: en.id,
-      name: libraryName(en.id, lang),
+      name: nameFor(S, en.id, lang),
       target: en.target ? { sets: en.target.sets, reps: en.target.reps, sec: en.target.sec, weight: en.target.weight } : null,
       sets: (en.sets || []).map(s => {
         const o = { done: !!s.done };
@@ -377,8 +383,8 @@ export function build(S, opts = {}) {
       const all = (S.workouts || []).filter(x => x && x.d);
       const idx = all.indexOf(w);
       const previous = all.slice(0, idx).filter(x => x.name && x.name === w.name).slice(-3);
-      p.session = { id: w.id || null, ...cleanWorkout(w, lang) };
-      p.previous = previous.map(x => cleanWorkout(x, lang));
+      p.session = { id: w.id || null, ...cleanWorkout(S, w, lang) };
+      p.previous = previous.map(x => cleanWorkout(S, x, lang));
       const inSession = new Set((w.entries || []).map(en => en.id));
       const agg = aggregates(S, [w], lang);
       p.aggregates = { ...agg, exercises: agg.exercises.filter(e => inSession.has(e.id)) };
@@ -396,7 +402,7 @@ export function build(S, opts = {}) {
     p.window = {
       from: workouts[0]?.d || null,
       to: workouts[workouts.length - 1]?.d || null,
-      workouts: workouts.map((w, i) => (i >= detailFrom ? cleanWorkout(w, lang) : compactWorkout(w, lang)))
+      workouts: workouts.map((w, i) => (i >= detailFrom ? cleanWorkout(S, w, lang) : compactWorkout(S, w, lang)))
     };
     p.aggregates = aggregates(S, workouts, lang);
     p.bodyweight = {
@@ -419,7 +425,7 @@ export function build(S, opts = {}) {
       p.history = {
         sessions: (S.workouts || []).length,
         since: (S.workouts || [])[0]?.d || null,
-        workingWeights: Object.entries(best).map(([id, w]) => ({ id, name: libraryName(id, lang), best: w }))
+        workingWeights: Object.entries(best).map(([id, w]) => ({ id, name: nameFor(S, id, lang), best: w }))
       };
     }
     if (opts.refine && opts.previous) {

@@ -173,9 +173,18 @@ test('the names inside the payload follow meta.lang — the model echoes what it
   // A debrief names its session the same way.
   const d = payload.build(S, { handle: handleFor('uid-es'), kind: 'debrief', workoutId: 'w1' });
   assert.equal(d.session.entries[0].name, es['0001']);
-  // A custom exercise keeps the name its owner gave it, in whatever language that is.
-  const custom = payload.build(sampleState({ customEx: [{ id: 'cx1', n: 'Sandbag carry', bp: 'back' }], lang: 'es' }), { handle: handleFor('uid-es'), kind: 'review' });
-  assert.equal(custom.library.find(e => e.id === 'cx1')?.n, 'Sandbag carry');
+  // A custom exercise is named from its owner's own record wherever a name is built — plan,
+  // window and aggregates. Without it those fields carried `null` and the model wrote "null".
+  const custom = sampleState({
+    customEx: [{ id: 'cx1', n: 'Plancha', bp: 'waist' }],
+    routines: [{ id: 'r1', name: 'A', ex: [{ id: 'cx1', sets: 3, reps: 10 }] }],
+    workouts: [{ id: 'w1', d: '2026-09-16', name: 'A', start: 1, end: 2, entries: [{ id: 'cx1', sets: [{ w: 0, r: 10, done: true }] }], prs: [] }],
+    lang: 'es'
+  })
+  const cp = payload.build(custom, { handle: handleFor('uid-es'), kind: 'review' })
+  assert.equal(cp.plan.routines[0].ex[0].name, 'Plancha')
+  assert.equal(cp.window.workouts[0].entries[0].name, 'Plancha')
+  assert.equal(cp.aggregates.exercises.find(e => e.id === 'cx1')?.name, 'Plancha');
 });
 
 test('declined changes are carried forward so the Coach does not nag', () => {
