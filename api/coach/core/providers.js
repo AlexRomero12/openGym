@@ -22,14 +22,18 @@ export const HTTP_PROVIDERS = Object.freeze({
     apiKeyEnv: 'OPENAI_API_KEY', oauthEnv: null,
     defaultBase: 'https://api.openai.com',
     defaultModel: 'gpt-5.6',
-    keyPlaceholder: 'sk-…'
+    keyPlaceholder: 'sk-…',
+    efforts: ['minimal', 'low', 'medium', 'high'], defaultEffort: 'medium'
   }),
   gemini: Object.freeze({
     label: 'Google Gemini', runtime: 'HTTPS', http: true,
     apiKeyEnv: 'GEMINI_API_KEY', oauthEnv: null,
     defaultBase: 'https://generativelanguage.googleapis.com',
     defaultModel: 'gemini-2.5-pro',
-    keyPlaceholder: 'AIza… or AQ.…'
+    keyPlaceholder: 'AIza… or AQ.…',
+    // The 2.5/3 series reason by default and default to high; the Coach's work is formatting
+    // JSON, so the low end is the sane starting point. `minimal` is left out: 3.1 Pro refuses it.
+    efforts: ['low', 'medium', 'high'], defaultEffort: 'low'
   }),
   // Ollama, LM Studio, vLLM, OpenRouter, a corporate gateway: anything that serves the
   // Chat Completions shape. The base URL is the whole configuration; a key is optional
@@ -43,12 +47,15 @@ export const HTTP_PROVIDERS = Object.freeze({
   }),
   // DeepSeek's own API — OpenAI-compatible, serves chat completions, JSON output and a models
   // list; `deepseek-flash` is the current cheap model (legacy `deepseek-v4-flash` still answers).
+  // `efforts` is what the model can be asked for: off disables its thinking (the Coach's default
+  // here — thinking ate the output budget), the rest enable it at that effort.
   deepseek: Object.freeze({
     label: 'DeepSeek API', runtime: 'HTTPS', http: true,
     apiKeyEnv: 'DEEPSEEK_API_KEY', oauthEnv: null,
     defaultBase: 'https://api.deepseek.com',
     defaultModel: 'deepseek-flash',
-    keyPlaceholder: 'sk-…'
+    keyPlaceholder: 'sk-…',
+    efforts: ['off', 'low', 'medium', 'high', 'max'], defaultEffort: 'off'
   }),
   // OpenCode's gateway, in its two plans: Zen (pay as you go) and Go (subscription). The same
   // account key works on both; the catalogs differ, and each lists its own models. No default
@@ -58,18 +65,31 @@ export const HTTP_PROVIDERS = Object.freeze({
     apiKeyEnv: 'OPENCODE_API_KEY', oauthEnv: null,
     defaultBase: 'https://opencode.ai/zen',
     defaultModel: null,
-    keyPlaceholder: 'sk-…'
+    keyPlaceholder: 'sk-…',
+    efforts: ['off', 'low', 'medium', 'high', 'max'], defaultEffort: 'off', effortsForModels: 'deepseek'
   }),
   'opencode-go': Object.freeze({
     label: 'OpenCode Go', runtime: 'HTTPS', http: true,
     apiKeyEnv: 'OPENCODE_API_KEY', oauthEnv: null,
     defaultBase: 'https://opencode.ai/zen/go',
     defaultModel: null,
-    keyPlaceholder: 'sk-…'
+    keyPlaceholder: 'sk-…',
+    efforts: ['off', 'low', 'medium', 'high', 'max'], defaultEffort: 'off', effortsForModels: 'deepseek'
   })
 });
 
 export const HTTP_PROVIDER_IDS = Object.freeze(Object.keys(HTTP_PROVIDERS));
+
+/** The efforts a provider's current model accepts — empty when it has no such control, or when
+ *  the control belongs to some models of a multi-vendor gateway and this is not one of them.
+ *  `effortsForModels` is a lowercase model prefix so it can travel to the setup screen as-is
+ *  (a regex is not JSON), keeping the rule in one place. */
+export function effortsFor(id, model) {
+  const meta = HTTP_PROVIDERS[id];
+  if (!meta || !meta.efforts) return [];
+  if (meta.effortsForModels && !String(model || '').toLowerCase().startsWith(meta.effortsForModels)) return [];
+  return meta.efforts;
+}
 
 /** The base URL a provider will actually be called at: the configured override, else the default. */
 export function baseUrlFor(id, cfg) {

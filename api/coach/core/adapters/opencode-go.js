@@ -7,6 +7,7 @@
  */
 import { httpAdapter } from './http.js';
 import { chatCompletionsSpec } from './openai.js';
+import { opencodeEffortBody } from './opencode.js';
 
-export const opencodeGoSpec = chatCompletionsSpec('opencode-go', { maxTokensField: 'max_tokens' });
+export const opencodeGoSpec = chatCompletionsSpec('opencode-go', { maxTokensField: 'max_tokens', effortBody: opencodeEffortBody });
 export default httpAdapter(opencodeGoSpec);

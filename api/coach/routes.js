@@ -10,7 +10,7 @@ import { computeCohort } from './cohort.js';
 import { adapterFor } from './adapters/index.js';
 import { canDropPrivileges } from './adapters/spawn.js';
 import { DATA_CATEGORIES } from './core/payload.js';
-import { validateBaseUrl, baseUrlFor } from './core/providers.js';
+import { validateBaseUrl, baseUrlFor, effortsFor } from './core/providers.js';
 
 // Job failures the user sees, in the app's own voice. The raw provider detail never reaches
 // them — it goes to the admin card, which is where someone can act on it (FR-47).
@@ -156,11 +156,17 @@ export function coachRoutes({ json, readBody, readSession, requireAdmin }) {
         provider: c.provider || null,
         providerLabel: c.provider ? ((cfgStore.PROVIDERS[c.provider] || {}).label || null) : null,
         model: c.model || null,
+        effort: c.effort || null,
         baseUrl: c.baseUrl || null,
         account: c.ok ? (c.account || null) : null,
         providers: cfgStore.PROFILE_PROVIDERS.map(id => {
           const p = cfgStore.PROVIDERS[id];
-          return { id, label: p.label, keyPlaceholder: p.keyPlaceholder || null, baseUrl: !!p.baseUrl, keyOptional: !!p.keyOptional, defaultModel: p.defaultModel || null };
+          return {
+            id, label: p.label, keyPlaceholder: p.keyPlaceholder || null, baseUrl: !!p.baseUrl, keyOptional: !!p.keyOptional, defaultModel: p.defaultModel || null,
+            // Which models take an effort, and which values it accepts (absent for providers
+            // with no such control at all).
+            efforts: p.efforts || null, defaultEffort: p.defaultEffort || null, effortsForModels: p.effortsForModels || null
+          };
         })
       });
     },
@@ -212,7 +218,16 @@ export function coachRoutes({ json, readBody, readSession, requireAdmin }) {
       const prev = cfgStore.loadProfileAuth(user.id);
       const keep = prev && prev.provider === id && prev.data;
       if (!token && !meta.keyOptional && !keep) return json(res, 400, { error: 'no API key supplied' });
-      cfgStore.saveProfileAccount(user.id, { provider: id, token, model: body.model ? String(body.model) : null, baseUrl: v.value, account: body.account });
+      // An effort that this provider and model do not take is refused rather than stored and
+      // silently ignored: the screen can only offer what the model accepts, so anything else
+      // is a client that skipped the check.
+      let effort;
+      if (body.effort !== undefined) {
+        effort = body.effort ? String(body.effort) : null;
+        const allowed = effort ? effortsFor(id, body.model ? String(body.model) : null) : [];
+        if (effort && !allowed.includes(effort)) return json(res, 400, { error: 'this model does not take that effort' });
+      }
+      cfgStore.saveProfileAccount(user.id, { provider: id, token, model: body.model ? String(body.model) : null, effort, baseUrl: v.value, account: body.account });
       json(res, 200, { ok: true, account: cfgStore.accountFor(user.id) });
     },
 
@@ -254,10 +269,12 @@ export function coachRoutes({ json, readBody, readSession, requireAdmin }) {
           setupToken: !!p.setupToken, deviceLogin: !!p.deviceLogin, apiKey: !!p.apiKeyEnv,
           http: !!p.http, baseUrl: !!p.baseUrl, keyOptional: !!p.keyOptional, keyPlaceholder: p.keyPlaceholder || null,
           defaultModel: p.defaultModel || null,
+          efforts: p.efforts || null, defaultEffort: p.defaultEffort || null, effortsForModels: p.effortsForModels || null,
           // Which providers already hold a key — so switching chips is visibly not a reset.
           connected: !!(cfgStore.authFor(cfg, id) && cfgStore.authFor(cfg, id).data)
         })),
         model: profile ? null : cfgStore.modelFor(cfg),
+        effort: profile ? null : cfgStore.effortFor(cfg),
         models: cfg.models,
         baseUrl: !profile && cfgStore.providerMeta(cfg).http ? baseUrlFor(cfg.provider, cfg) : null,
         knownModels: profile ? null : (check.models || null),
@@ -326,6 +343,13 @@ export function coachRoutes({ json, readBody, readSession, requireAdmin }) {
       if (body.model !== undefined) {
         patch.models = { ...current.models };
         if (body.model) patch.models[target] = String(body.model).slice(0, 80); else delete patch.models[target];
+      }
+      if (body.effort !== undefined) {
+        const model = body.model !== undefined ? (body.model ? String(body.model) : null) : cfgStore.modelFor(current, target);
+        const allowed = body.effort ? effortsFor(target, model) : [];
+        if (body.effort && !allowed.includes(String(body.effort))) return json(res, 400, { error: 'this model does not take that effort' });
+        patch.efforts = { ...current.efforts };
+        if (body.effort) patch.efforts[target] = String(body.effort); else delete patch.efforts[target];
       }
       if (body.baseUrl !== undefined) {
         if (!cfgStore.PROVIDERS[target].baseUrl) return json(res, 400, { error: `${target} has a fixed endpoint` });

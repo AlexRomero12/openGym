@@ -353,8 +353,8 @@ async function execute(job) {
     const attempt = await runPipeline({
       adapter, cfg: jobCfg, kind: job.kind, payload, model: eff.model, timeoutMs: TIMEOUT_MS,
       // The HTTP adapters take the fetch and the abort signal they are given; the runtime
-      // adapters ignore both.
-      invokeOpts: { jobDir, env, fetch: fetchFor(TIMEOUT_MS), signal: ctl.signal, ...(gw ? { headers: gw } : {}) }
+      // adapters ignore both. `effort` rides along for the models that have one.
+      invokeOpts: { jobDir, env, fetch: fetchFor(TIMEOUT_MS), signal: ctl.signal, effort: eff.effort, ...(gw ? { headers: gw } : {}) }
     });
     if (!attempt.ok) {
       // Cancelled by a forget, not failed by the provider: the log must not blame the job budget.
@@ -463,7 +463,7 @@ export async function testRun() {
     if (!check.ok) return { ok: false, error: check.error || 'the provider runtime could not be run' };
     const gw = gatewayHeaders(cfg.provider, 'opengym-admin-test');
     const r = await adapter.invoke({
-      cfg, jobDir, env, model: cfgStore.modelFor(cfg), timeoutMs: 90000, fetch: fetchFor(90000),
+      cfg, jobDir, env, model: cfgStore.modelFor(cfg), effort: cfgStore.effortFor(cfg), timeoutMs: 90000, fetch: fetchFor(90000),
       ...(gw ? { headers: gw } : {}),
       prompt: 'Reply with exactly this JSON object and nothing else: {"coach_contract":1,"ok":true}'
     });

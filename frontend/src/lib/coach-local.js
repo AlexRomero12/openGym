@@ -150,7 +150,7 @@ async function run(S, kind, opts, d, adapter) {
   })
   const attempt = await runPipeline({
     adapter, cfg: cfgOf(d), kind, payload,
-    model: d.model || HTTP_PROVIDERS[d.provider].defaultModel, timeoutMs: timeoutFor(d.provider),
+    model: d.model || HTTP_PROVIDERS[d.provider].defaultModel, effort: d.effort || HTTP_PROVIDERS[d.provider].defaultEffort || null, timeoutMs: timeoutFor(d.provider),
     // The OpenCode gateways want a client identity and a stable session; the device handle is
     // that session, minted once and kept in the device file.
     invokeOpts: { env: envOf(d, key), fetch: nativeFetch, ...(gatewayHeaders(d.provider, await handle()) || {}) }

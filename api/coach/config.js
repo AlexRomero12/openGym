@@ -79,6 +79,9 @@ const DEFAULTS = {
   // a key away — the one that was pasted for Anthropic is still there when you come back.
   auth: {},                                          // instance mode: { [provider]: { type, account, data:<encrypted>, connectedAt } }
   models: {},                                        // { [provider]: model id }
+  // How hard a provider's model should think, where that is a thing: DeepSeek's thinking
+  // toggle, OpenAI's reasoning effort. Absent means the provider's own default.
+  efforts: {},
   providerOptions: {},                               // { [provider]: { baseUrl } }
   boundUid: {},                                      // instance mode: { [provider]: the profile its credential bound to }
   caps: { perProfileDaily: 10, instanceDaily: 0 },   // 0 = unlimited
@@ -88,7 +91,7 @@ const DEFAULTS = {
   community: false,
   log: []
 };
-const PER_PROVIDER = ['auth', 'models', 'providerOptions', 'boundUid'];
+const PER_PROVIDER = ['auth', 'models', 'efforts', 'providerOptions', 'boundUid'];
 const isPlainObj = v => !!v && typeof v === 'object' && !Array.isArray(v);
 const LOG_MAX = 100;
 
@@ -168,6 +171,7 @@ export function reset() { cache = null; keyCache = null; }
    The only way the rest of the code reads the per-provider maps, so the shape stays here. */
 export const authFor = (cfg = load(), p = cfg.provider) => (cfg.auth && cfg.auth[p]) || null;
 export const modelFor = (cfg = load(), p = cfg.provider) => (cfg.models && cfg.models[p]) || (PROVIDERS[p] && PROVIDERS[p].defaultModel) || null;
+export const effortFor = (cfg = load(), p = cfg.provider) => (cfg.efforts && cfg.efforts[p]) || (PROVIDERS[p] && PROVIDERS[p].defaultEffort) || null;
 export const optionsFor = (cfg = load(), p = cfg.provider) => (cfg.providerOptions && cfg.providerOptions[p]) || {};
 export const boundUidFor = (cfg = load(), p = cfg.provider) => (cfg.boundUid && cfg.boundUid[p]) || null;
 export function saveAuth(provider, auth) {
@@ -182,6 +186,11 @@ export function saveModel(provider, model) {
   const next = { ...load().models };
   if (model) next[provider] = model; else delete next[provider];
   return save({ models: next });
+}
+export function saveEffort(provider, effort) {
+  const next = { ...load().efforts };
+  if (effort) next[provider] = String(effort).slice(0, 20); else delete next[provider];
+  return save({ efforts: next });
 }
 export function saveOptions(provider, patch) {
   const all = { ...load().providerOptions };
@@ -252,11 +261,11 @@ export function credentialFor(uid) {
       // filed it — but unlike instance mode there is no admin-chosen endpoint to fall back on,
       // so the record itself has to exist and, where one is required, name a base URL.
       if (rec && meta.keyOptional && !rec.data && (!meta.baseUrl || rec.baseUrl)) {
-        return { ok: true, auth: null, type: null, account: null, mode: 'profile', provider, model: rec.model || null, baseUrl: rec.baseUrl || null };
+        return { ok: true, auth: null, type: null, account: null, mode: 'profile', provider, model: rec.model || null, effort: rec.effort || null, baseUrl: rec.baseUrl || null };
       }
       return { ok: false, reason: 'no-credential', mode: 'profile', provider };
     }
-    return { ok: true, auth, type: rec.type || 'apikey', account: rec.account || null, mode: 'profile', provider, model: rec.model || null, baseUrl: rec.baseUrl || null };
+    return { ok: true, auth, type: rec.type || 'apikey', account: rec.account || null, mode: 'profile', provider, model: rec.model || null, effort: rec.effort || null, baseUrl: rec.baseUrl || null };
   }
 
   // instance mode
@@ -286,13 +295,15 @@ export function credentialFor(uid) {
 export function effectiveFor(uid) {
   const cfg = load();
   if (cfg.authMode !== 'profile') {
-    return { provider: cfg.provider, model: modelFor(cfg), baseUrl: null, credential: credentialFor(uid) };
+    return { provider: cfg.provider, model: modelFor(cfg), effort: effortFor(cfg), baseUrl: null, credential: credentialFor(uid) };
   }
   const rec = loadProfileAuth(uid);
   const provider = rec && PROVIDERS[rec.provider] ? rec.provider : cfg.provider;
   return {
     provider,
     model: (rec && rec.model) || modelFor(cfg, provider),
+    // What this profile asked for, or the provider's own default when they never chose.
+    effort: (rec && rec.effort) || (PROVIDERS[provider] && PROVIDERS[provider].defaultEffort) || null,
     baseUrl: (rec && rec.baseUrl) || null,
     credential: credentialFor(uid)
   };
@@ -328,6 +339,7 @@ export function accountFor(uid) {
     providerLabel: (PROVIDERS[provider] || providerMeta(cfg)).label,
     // The model and endpoint are the profile's own in profile mode, the instance's otherwise.
     model: c.model || modelFor(cfg, provider),
+    effort: c.effort || effortFor(cfg, provider),
     baseUrl: c.baseUrl || null,
     account: c.ok ? (c.account || null) : null,
     connected: !!c.ok,
@@ -342,15 +354,19 @@ export function accountFor(uid) {
  * no new token arrives and the provider has not changed, so editing the model does not mean
  * pasting the key again.
  */
-export function saveProfileAccount(uid, { provider, token, model, baseUrl, account }) {
+export function saveProfileAccount(uid, { provider, token, model, effort, baseUrl, account }) {
   const prev = loadProfileAuth(uid);
-  const keep = prev && prev.provider === provider && prev.data && !token ? prev.data : null;
+  const same = prev && prev.provider === provider;
+  const keep = same && prev.data && !token ? prev.data : null;
   return saveProfileAuth(uid, {
     provider,
     type: 'apikey',
     account: String(account || '').slice(0, 120),
     data: token ? encrypt({ token }) : keep,
     model: model ? String(model).slice(0, 80) : null,
+    // Leaving effort out keeps what was filed (editing the model must not reset it); an empty
+    // value clears it back to the provider's default.
+    effort: effort === undefined ? (same ? (prev.effort || null) : null) : (effort ? String(effort).slice(0, 20) : null),
     baseUrl: baseUrl || null,
     connectedAt: new Date().toISOString()
   });

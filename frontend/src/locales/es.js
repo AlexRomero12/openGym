@@ -1453,6 +1453,16 @@ export default {
   '{0} of {1}': '{0} de {1}',
   'Counts only. What each person asked the Coach, and the keys they filed, never appear here — a profile key is stored encrypted and no route reads it back.': 'Solo contadores. Lo que cada persona le preguntó al entrenador y las claves que guardó nunca aparecen aquí: la clave de un perfil se guarda cifrada y ninguna ruta la devuelve.',
   'Open my AI account': 'Abrir mi cuenta de IA',
+  // --- Entrenador IA: esfuerzo de razonamiento ---
+  'Effort: {0}': 'Esfuerzo: {0}',
+  'Provider default': 'Por defecto del proveedor',
+  'Off (fastest)': 'Desactivado (más rápido)',
+  'Minimal': 'Mínimo',
+  'Low': 'Bajo',
+  'Medium': 'Medio',
+  'High': 'Alto',
+  'Max': 'Máximo',
+  'How hard the model should think before answering. Reasoning is slower and takes room from the answer; off is the fastest.': 'Cuánto debe pensar el modelo antes de responder. Razonar es más lento y le quita espacio a la respuesta; desactivado es lo más rápido.',
   // --- Entrenador IA: cuestionario y consentimiento ---
   'Heavier lifts, lower reps.': 'Pesos más altos, menos repeticiones.',
   'Volume and progression.': 'Volumen y progresión.',

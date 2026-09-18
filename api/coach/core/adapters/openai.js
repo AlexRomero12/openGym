@@ -7,7 +7,7 @@
 import { httpAdapter } from './http.js';
 import { SYSTEM_PROMPT } from '../system-prompt.js';
 
-export function chatCompletionsSpec(id, { maxTokensField = 'max_completion_tokens', temperature = null } = {}) {
+export function chatCompletionsSpec(id, { maxTokensField = 'max_completion_tokens', temperature = null, effortBody = null } = {}) {
   return {
     id,
     path: () => '/v1/chat/completions',
@@ -17,7 +17,7 @@ export function chatCompletionsSpec(id, { maxTokensField = 'max_completion_token
     // llama.cpp/Ollama endpoint can reuse its KV prefix cache and only ever re-processes the
     // payload. A schema, when given, turns JSON mode into grammar-constrained decoding —
     // the answer cannot leave the shape, which is most of what the repair round used to fix.
-    body: ({ model, prompt, system, schema, maxTokens }) => ({
+    body: ({ model, prompt, system, schema, maxTokens, effort }) => ({
       model,
       messages: [
         { role: 'system', content: system ? SYSTEM_PROMPT + '\n\n' + system : SYSTEM_PROMPT },
@@ -27,7 +27,10 @@ export function chatCompletionsSpec(id, { maxTokensField = 'max_completion_token
       response_format: schema
         ? { type: 'json_schema', json_schema: { name: 'coach_answer', schema } }
         : { type: 'json_object' },
-      [maxTokensField]: maxTokens
+      [maxTokensField]: maxTokens,
+      // The effort the profile chose, in the one shape this provider understands (DeepSeek's
+      // thinking toggle, OpenAI's reasoning_effort, nothing at all elsewhere).
+      ...(effortBody ? (effortBody(effort, { model }) || {}) : {})
     }),
     // A server that rejects schema/JSON mode gets the same request once more with plain JSON
     // mode, then without any; the parser copes with a fenced answer and the validator is the
@@ -62,5 +65,9 @@ export function chatCompletionsSpec(id, { maxTokensField = 'max_completion_token
 const NOT_CHAT = /realtime|audio|tts|transcri|whisper|embedding|image|dall-e|moderation|search|instruct|codex|computer-use|deep-research|-pro(?:-|$)|davinci|babbage|curie|ada/i;
 export const isChatModel = id => /^(gpt-|o\d|chatgpt-)/.test(id) && !NOT_CHAT.test(id);
 
-export const openaiSpec = chatCompletionsSpec('openai');
+export const openaiSpec = chatCompletionsSpec('openai', {
+  // The reasoners take an effort; the classic chat models ignore an unknown field. The setup
+  // screen only offers it for the models the provider declares it for.
+  effortBody: effort => (effort ? { reasoning_effort: effort } : null)
+});
 export default httpAdapter(openaiSpec);

@@ -6,6 +6,7 @@
 // window it names, which is why an old proposal in the thread still draws its chart months
 // later, against the data as it was then.
 import { EXIDX } from './exercises.js'
+import { exerciseNameFor } from './i18n.js'
 import { workoutVolume } from './history.js'
 import { isWarmupRow } from './workout-model.js'
 import { bestSetOf } from './onerm.js'
@@ -15,7 +16,11 @@ const median = arr => {
   return a.length ? a[Math.floor(a.length / 2)] : null
 }
 const bpOf = (S, id) => EXIDX[id]?.bp || (S.customEx || []).find(c => c.id === id)?.bp || null
-const nameOf = (S, id) => EXIDX[id]?.n || (S.customEx || []).find(c => c.id === id)?.n || id
+// The name a card shows is the name the rest of the app shows: translated when the pack has it.
+const nameOf = (S, id) => {
+  const ex = EXIDX[id] || (S.customEx || []).find(c => c.id === id)
+  return ex ? exerciseNameFor(ex) : id
+}
 const tsOf = w => w.start || new Date(w.d + 'T12:00:00').getTime()
 
 /** Workouts inside an inclusive ISO-date window; either bound may be missing. */

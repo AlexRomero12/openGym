@@ -16,6 +16,7 @@ import { useUI } from '../store/useUI.js'
 import { t } from '../lib/i18n.js'
 import { MOBILE } from '../lib/mobile.js'
 import { CATEGORY_TEXT } from '../lib/coach.js'
+import { effortsForProvider, effortLabel } from '../lib/coach.js'
 import { getApiKey, setApiKey, clearApiKey } from '../lib/coach-secrets.js'
 import { HTTP_PROVIDERS, HTTP_PROVIDER_IDS, baseUrlFor, validateBaseUrl } from '../../../api/coach/core/providers.js'
 import { DATA_CATEGORIES } from '../../../api/coach/core/categories.js'
@@ -39,6 +40,7 @@ export default function CoachSetup() {
   const [provider, setProvider] = useState(coachLocal?.provider || 'anthropic')
   const [baseUrl, setBaseUrl] = useState(coachLocal?.baseUrl || '')
   const [model, setModel] = useState(coachLocal?.model || '')
+  const [effort, setEffort] = useState(coachLocal?.effort || '')
   const [key, setKey] = useState('')
   const [hasKey, setHasKey] = useState(false)
   const [models, setModels] = useState(null)
@@ -52,6 +54,7 @@ export default function CoachSetup() {
   useEffect(() => { setModels(null); setModel(coachLocal?.provider === provider ? (coachLocal?.model || '') : '') }, [provider])
 
   const meta = HTTP_PROVIDERS[provider] || {}
+  const effortOpts = effortsForProvider(meta, model || meta.defaultModel || '')
   const host = hostOf(baseUrlFor(provider, { providerOptions: { [provider]: { baseUrl } } }))
   const serverHasCoach = !!(user && config?.coach?.enabled)
 
@@ -90,7 +93,7 @@ export default function CoachSetup() {
       // The mode first, the key second: the settings file is the cheap, reliable write, the
       // key goes through the platform's secure store, which is the step that can misbehave.
       // Either way the user hears what happened instead of watching a greyed-out button (#42).
-      await setCoachLocal({ mode: 'byok', provider, model: chosen, baseUrl: meta.baseUrl ? (validateBaseUrl(baseUrl).value || null) : null })
+      await setCoachLocal({ mode: 'byok', provider, model: chosen, effort: effort || null, baseUrl: meta.baseUrl ? (validateBaseUrl(baseUrl).value || null) : null })
       if (key.trim()) { await setApiKey(key.trim()); setHasKey(true); setKey('') }
       toast(t('The Coach is on'))
       nav('/coach')
@@ -175,6 +178,16 @@ export default function CoachSetup() {
           <select className="input" value={model} disabled={busy} onChange={e => setModel(e.target.value)} style={{ width: '100%' }}>
             <option value="">{meta.defaultModel ? `(${meta.defaultModel})` : t('Pick a model')}</option>
             {models.map(m => <option key={m} value={m}>{m}</option>)}
+          </select>
+        </div>
+      </Section>}
+
+      {effortOpts.length > 0 && <Section title={t('Effort')}
+        footer={t('How hard the model should think before answering. Reasoning is slower and takes room from the answer; off is the fastest.')}>
+        <div style={{ padding: '8px 12px' }}>
+          <select className="input" value={effort} disabled={busy} onChange={e => setEffort(e.target.value)} style={{ width: '100%' }}>
+            <option value="">{t('Provider default')}</option>
+            {effortOpts.map(x => <option key={x} value={x}>{effortLabel(x)}</option>)}
           </select>
         </div>
       </Section>}

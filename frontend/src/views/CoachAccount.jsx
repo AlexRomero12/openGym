@@ -12,6 +12,7 @@ import { useNavigate } from 'react-router-dom'
 import { useUI } from '../store/useUI.js'
 import { t } from '../lib/i18n.js'
 import { coachSetup, coachModels, coachConnect, coachDisconnect } from '../lib/coach-api.js'
+import { effortsForProvider, effortLabel } from '../lib/coach.js'
 import { confirmSheet } from '../sheets.jsx'
 import Icon from '../components/Icon.jsx'
 import { Section, Row, Button, TextField } from '../components/ui.jsx'
@@ -25,6 +26,7 @@ export default function CoachAccount() {
   const [baseUrl, setBaseUrl] = useState('')
   const [key, setKey] = useState('')
   const [model, setModel] = useState('')
+  const [effort, setEffort] = useState('')
   const [models, setModels] = useState(null)
   const [busy, setBusy] = useState(false)
 
@@ -38,10 +40,14 @@ export default function CoachAccount() {
     setProvider(d.provider || d.providers?.[0]?.id || '')
     setBaseUrl(d.baseUrl || '')
     setModel(d.model || '')
+    setEffort(d.effort || '')
   }, [d])
 
   const meta = (d?.providers || []).find(p => p.id === provider) || null
   const unchangedKey = !!(d?.connected && d.provider === provider)
+  // Which efforts the chosen model takes — the gateway's list only applies to its DeepSeek
+  // models, so an empty list means the selector stays hidden.
+  const effortOpts = effortsForProvider(meta, model || meta?.defaultModel || '')
 
   const listModels = async () => {
     if (!meta) return
@@ -65,7 +71,7 @@ export default function CoachAccount() {
     if (!meta.keyOptional && !key.trim() && !unchangedKey) return toast(t('Enter your API key'))
     setBusy(true)
     try {
-      await coachConnect({ provider, key: key.trim(), model: chosen, baseUrl: meta.baseUrl ? baseUrl.trim() : null })
+      await coachConnect({ provider, key: key.trim(), model: chosen, effort: effort || null, baseUrl: meta.baseUrl ? baseUrl.trim() : null })
       setKey(''); setModels(null); setEditing(false)
       toast(t('Your account is connected'))
       await load()
@@ -109,7 +115,8 @@ export default function CoachAccount() {
       <div className="muted small">{t('This instance runs the Coach on one shared account, set up by its admin — there is nothing to connect here.')}</div>
     </div> : d.connected && !editing ? <>
       <Section title={t('Connected')} footer={t('Your key is stored encrypted on your server and is used only for your own Coach runs. Not even the admin can read it.')}>
-        <Row icon="key" iconTint="var(--acc)" title={d.providerLabel || provider} subtitle={d.model ? t('Model {0}', d.model) : null} />
+        <Row icon="key" iconTint="var(--acc)" title={d.providerLabel || provider}
+          subtitle={[d.model ? t('Model {0}', d.model) : null, d.effort ? t('Effort: {0}', effortLabel(d.effort)) : null].filter(Boolean).join(' · ') || null} />
         <Row icon="wrench" iconTint="var(--indigo)" title={t('Change provider, key or model')} accessory="chevron"
           onClick={() => { setEditing(true); setModels(null); setKey('') }} />
         <Row icon="signOut" iconTint="var(--red)" title={t('Remove my account')} danger onClick={remove} />
@@ -141,6 +148,16 @@ export default function CoachAccount() {
           <select className="input" value={model} disabled={busy} onChange={e => setModel(e.target.value)} style={{ width: '100%' }}>
             <option value="">{meta?.defaultModel ? `(${meta.defaultModel})` : t('Pick a model')}</option>
             {models.map(m => <option key={m} value={m}>{m}</option>)}
+          </select>
+        </div>
+      </Section>}
+
+      {effortOpts.length > 0 && <Section title={t('Effort')}
+        footer={t('How hard the model should think before answering. Reasoning is slower and takes room from the answer; off is the fastest.')}>
+        <div style={{ padding: '8px 12px' }}>
+          <select className="input" value={effort} disabled={busy} onChange={e => setEffort(e.target.value)} style={{ width: '100%' }}>
+            <option value="">{t('Provider default')}</option>
+            {effortOpts.map(x => <option key={x} value={x}>{effortLabel(x)}</option>)}
           </select>
         </div>
       </Section>}

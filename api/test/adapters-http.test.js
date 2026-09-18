@@ -95,6 +95,28 @@ test('Gemini: generateContent with the key as a header — never ?key= — and J
   assert.equal(c.body.contents[0].parts[0].text, 'P');
 });
 
+test('Gemini thinking: the level rides when chosen, and reasoning parts never join the answer', async () => {
+  const f = fakeFetch([ok({ candidates: [{ content: { parts: [{ text: ANSWER }] }, finishReason: 'STOP' }] })]);
+  await gemini.invoke({ cfg: {}, prompt: 'P', env, model: 'gemini-z', effort: 'low', fetch: f });
+  assert.deepEqual(f.calls[0].body.generationConfig.thinkingConfig, { thinkingLevel: 'low' });
+
+  const g = fakeFetch([ok({ candidates: [{ content: { parts: [{ text: ANSWER }] }, finishReason: 'STOP' }] })]);
+  await gemini.invoke({ cfg: {}, prompt: 'P', env, model: 'gemini-z', fetch: g });
+  assert.equal('thinkingConfig' in g.calls[0].body.generationConfig, false, 'no effort chosen, no field sent');
+
+  // A thought part is the model's reasoning, not the answer; an answer of only thoughts is a
+  // clean failure rather than an empty proposal.
+  const h = fakeFetch([ok({ candidates: [{ content: { parts: [{ thought: true, text: 'thinking…' }, { text: ANSWER }] }, finishReason: 'STOP' }] })]);
+  const r = await gemini.invoke({ cfg: {}, prompt: 'P', env, model: 'gemini-z', fetch: h });
+  assert.equal(r.code, 0);
+  assert.equal(r.text, ANSWER);
+
+  const i = fakeFetch([ok({ candidates: [{ content: { parts: [{ thought: true, text: 'only thoughts' }] }, finishReason: 'STOP' }] })]);
+  const r2 = await gemini.invoke({ cfg: {}, prompt: 'P', env, model: 'gemini-z', fetch: i });
+  assert.equal(r2.code, 1);
+  assert.match(r2.stderr, /empty answer/);
+});
+
 test('compatible: the configured base URL, max_tokens, and no Authorization header when there is no key', async () => {
   const f = fakeFetch([ok({ choices: [{ message: { content: ANSWER }, finish_reason: 'stop' }] })]);
   const r = await compatible.invoke({ cfg: cfgCompat, prompt: 'P', env: {}, model: 'llama3', fetch: f });
@@ -149,6 +171,47 @@ test('DeepSeek falls back to its default model, and its models list is read from
   assert.equal(r.ok, true, r.error);
   assert.deepEqual(r.models, ['deepseek-flash', 'deepseek-v4-pro']);
   assert.equal(g.calls[0].url, 'https://api.deepseek.com/v1/models');
+});
+
+test('DeepSeek reasoning is off by default, and an effort turns it back on', async () => {
+  const ds = fakeFetch([ok({ choices: [{ message: { content: ANSWER }, finish_reason: 'stop' }] })]);
+  await deepseek.invoke({ cfg: {}, prompt: 'P', env: { DEEPSEEK_API_KEY: 'sk-ds-1' }, model: 'deepseek-flash', fetch: ds });
+  assert.deepEqual(ds.calls[0].body.thinking, { type: 'disabled' }, 'deepseek: thinking ate the answer budget');
+
+  // The efforts a profile can pick; DeepSeek's API has no `medium`, so it rides as `high`.
+  for (const [effort, want] of [['low', 'low'], ['medium', 'high'], ['high', 'high'], ['max', 'max']]) {
+    const f = fakeFetch([ok({ choices: [{ message: { content: ANSWER }, finish_reason: 'stop' }] })]);
+    await deepseek.invoke({ cfg: {}, prompt: 'P', env: { DEEPSEEK_API_KEY: 'sk-ds-1' }, model: 'deepseek-flash', effort, fetch: f });
+    assert.deepEqual(f.calls[0].body.thinking, { type: 'enabled' }, effort);
+    assert.equal(f.calls[0].body.reasoning_effort, want, effort);
+  }
+
+  for (const adapter of [opencode, opencodeGo]) {
+    const g = fakeFetch([ok({ choices: [{ message: { content: ANSWER }, finish_reason: 'stop' }] })]);
+    await adapter.invoke({ cfg: {}, prompt: 'P', env: { OPENCODE_API_KEY: 'sk-oc-1' }, model: 'deepseek-v4.1-flash', fetch: g });
+    assert.deepEqual(g.calls[0].body.thinking, { type: 'disabled' }, adapter.id);
+
+    const h = fakeFetch([ok({ choices: [{ message: { content: ANSWER }, finish_reason: 'stop' }] })]);
+    await adapter.invoke({ cfg: {}, prompt: 'P', env: { OPENCODE_API_KEY: 'sk-oc-1' }, model: 'deepseek-v4.1-flash', effort: 'low', fetch: h });
+    assert.deepEqual(h.calls[0].body.thinking, { type: 'enabled' }, adapter.id);
+    assert.equal(h.calls[0].body.reasoning_effort, 'low', adapter.id);
+  }
+
+  // Another vendor's model on the same gateway gets nothing extra: it has its own knobs.
+  const h = fakeFetch([ok({ choices: [{ message: { content: ANSWER }, finish_reason: 'stop' }] })]);
+  await opencodeGo.invoke({ cfg: {}, prompt: 'P', env: { OPENCODE_API_KEY: 'sk-oc-1' }, model: 'glm-5.3-flash', effort: 'high', fetch: h });
+  assert.equal('thinking' in h.calls[0].body, false);
+  assert.equal('reasoning_effort' in h.calls[0].body, false);
+});
+
+test('OpenAI sends reasoning_effort only when an effort was chosen', async () => {
+  const a = fakeFetch([ok({ choices: [{ message: { content: ANSWER }, finish_reason: 'stop' }] })]);
+  await openai.invoke({ cfg: {}, prompt: 'P', env, model: 'gpt-x', fetch: a });
+  assert.equal('reasoning_effort' in a.calls[0].body, false);
+
+  const b = fakeFetch([ok({ choices: [{ message: { content: ANSWER }, finish_reason: 'stop' }] })]);
+  await openai.invoke({ cfg: {}, prompt: 'P', env, model: 'gpt-x', effort: 'high', fetch: b });
+  assert.equal(b.calls[0].body.reasoning_effort, 'high');
 });
 
 test('the OpenCode catalogs list their own models', async () => {

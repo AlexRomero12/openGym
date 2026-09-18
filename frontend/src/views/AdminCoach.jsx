@@ -6,6 +6,7 @@ import { api } from '../lib/api.js'
 import { t } from '../lib/i18n.js'
 import Icon from '../components/Icon.jsx'
 import { Button, Switch, TextField } from '../components/ui.jsx'
+import { effortsForProvider, effortLabel } from '../lib/coach.js'
 
 /* The operator's side of the Coach, laid out as a guided setup: one master switch, numbered
    steps that each say what they are for, and everything an owner rarely needs folded away
@@ -96,6 +97,8 @@ export default function AdminCoach() {
 
   const meta = d.providers.find(p => p.id === d.provider) || {}
   const profile = d.authMode === 'profile'
+  // Which efforts the active provider's model takes; empty hides the field.
+  const effortOpts = effortsForProvider(meta, d.model || meta.defaultModel || '')
   const authState = d.auth?.state
   const authed = authState === 'connected' || authState === 'not-required' || authState === 'optional'
   const needsEndpoint = !!meta.baseUrl
@@ -263,6 +266,16 @@ export default function AdminCoach() {
           <Button size="sm" variant="tinted" icon="reset" disabled={busy} onClick={loadModels}>{models ? t('Refresh list') : t('List models')}</Button>
           {models && models.length ? <span className="dim small" style={{ alignSelf: 'center' }}>{t('{0} served by the provider', models.length)}</span> : null}
         </div>}
+        {effortOpts.length > 0 && <>
+          <div className="adm-field">
+            <label>{t('Effort')}</label>
+            <select className="adm-select" value={d.effort || ''} disabled={busy} onChange={e => patch({ effort: e.target.value || null })}>
+              <option value="">{t('Provider default')}</option>
+              {effortOpts.map(x => <option key={x} value={x}>{effortLabel(x)}</option>)}
+            </select>
+          </div>
+          <div className="adm-hint" style={{ margin: 0 }}>{t('How hard the model should think before answering. Reasoning is slower and takes room from the answer; off is the fastest.')}</div>
+        </>}
       </Step>
 
       {/* ---------- test ---------- */}

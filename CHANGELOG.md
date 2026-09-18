@@ -92,6 +92,21 @@ indica aparte (la traducción se propone en el **PR #245**).
   descripción de cada objetivo/experiencia y las 5 categorías del consentimiento, que quedaban en
   inglés. En Windows, `prompts.test.js` deja de fallar por CRLF (normalizado en el generador y en el
   test).
+- 🧠 **El esfuerzo se elige, y el razonamiento por defecto se apaga donde estorba.** DeepSeek,
+  OpenAI y Gemini razonan por defecto; en un tope de salida de 16k el pensamiento se comía la
+  respuesta («cut off at the output limit», o inutilizable) y cada job tardaba minutos. Ahora el
+  perfil (y la tarjeta de admin en modo instancia) elige entre los niveles que el modelo acepta —
+  DeepSeek `off/low/medium/high/max` (por defecto `off`), OpenAI `minimal–high`, Gemini `low–high`
+  (por defecto `low`) y los gateways de OpenCode solo para sus modelos DeepSeek—; se guarda con la
+  credencial (`effort`), el servidor rechaza lo que el modelo no acepta y el adaptador lo traduce:
+  `thinking: disabled`/`reasoning_effort` en DeepSeek, `reasoning_effort` en OpenAI,
+  `thinkingConfig.thinkingLevel` en Gemini.
+- 🔭 **Gemini revisado.** Se ignoran las partes `thought` (si se colaban, el JSON dejaba de ser
+  parseable → «the app couldn’t use it») y una respuesta vacía da un error claro; el nivel de
+  pensamiento se manda cuando corresponde.
+- 🏷️ **Los nombres en las tarjetas de la app también siguen el idioma.** `exName`/`exTitle` (Coach)
+  y `nameOf` (insights del debrief) usaban el catálogo inglés: ahora leen con `exerciseNameFor`,
+  como el resto de la app (las filas de «Mejor serie, 1RM estimado» y los títulos de cada cambio).
 
 ## v1.3.7 — 2026-09-12
 

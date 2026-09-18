@@ -182,6 +182,33 @@ test('the models route lists with the key on its way in, before anything is stor
   } finally { mock.close(); }
 });
 
+/* ---------- the effort a profile picks ---------- */
+
+test('the effort is stored, validated against the model, kept on a re-save and cleared on demand', async () => {
+  fresh();
+  const alice = harness('alice');
+
+  // The gateway takes an effort only for its DeepSeek models — anything else is refused.
+  let r = await alice('POST /api/coach/credential', { provider: 'opencode-go', key: 'sk-oc-1', model: 'glm-5.3-flash', effort: 'high' });
+  assert.equal(r.status, 400);
+  r = await alice('POST /api/coach/credential', { provider: 'opencode-go', key: 'sk-oc-1', model: 'deepseek-v4.1-flash', effort: 'high' });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(cfg.effectiveFor('alice').effort, 'high');
+
+  // The setup screen reports it back, with the options the model takes.
+  r = await alice('GET /api/coach/setup');
+  assert.equal(r.body.effort, 'high');
+  const gw = r.body.providers.find(p => p.id === 'opencode-go');
+  assert.deepEqual(gw.efforts, ['off', 'low', 'medium', 'high', 'max']);
+  assert.equal(gw.effortsForModels, 'deepseek');
+
+  // Editing the model keeps what was filed; clearing the effort falls back to the default.
+  await alice('POST /api/coach/credential', { provider: 'opencode-go', model: 'deepseek-v4.1-flash' });
+  assert.equal(cfg.effectiveFor('alice').effort, 'high');
+  await alice('POST /api/coach/credential', { provider: 'opencode-go', model: 'deepseek-v4.1-flash', effort: null });
+  assert.equal(cfg.effectiveFor('alice').effort, 'off');
+});
+
 /* ---------- instance-level behaviour that must not follow the profiles ---------- */
 
 test('an unconnected profile is told to connect, not that the instance is off', () => {

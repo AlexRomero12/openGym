@@ -29,7 +29,8 @@ vi.mock('../lib/coach-api.js', () => ({
 
 const PROVIDERS = [
   { id: 'anthropic', label: 'Anthropic API', keyPlaceholder: 'sk-ant-…', baseUrl: false, keyOptional: false, defaultModel: 'claude-opus-5' },
-  { id: 'compatible', label: 'OpenAI-compatible endpoint', keyPlaceholder: '(optional)', baseUrl: true, keyOptional: true, defaultModel: null }
+  { id: 'compatible', label: 'OpenAI-compatible endpoint', keyPlaceholder: '(optional)', baseUrl: true, keyOptional: true, defaultModel: null },
+  { id: 'opencode-go', label: 'OpenCode Go', keyPlaceholder: 'sk-…', baseUrl: false, keyOptional: false, defaultModel: null, efforts: ['off', 'low', 'medium', 'high', 'max'], defaultEffort: 'off', effortsForModels: 'deepseek' }
 ]
 
 let root, container
@@ -78,7 +79,7 @@ describe('my AI account', () => {
     await act(async () => { select.dispatchEvent(new Event('change', { bubbles: true })) })
 
     await click(byText(/Save and use the Coach/))
-    expect(mocks.connect).toHaveBeenCalledWith({ provider: 'anthropic', key: 'sk-ant-test', model: 'claude-opus-5', baseUrl: null })
+    expect(mocks.connect).toHaveBeenCalledWith({ provider: 'anthropic', key: 'sk-ant-test', model: 'claude-opus-5', effort: null, baseUrl: null })
     expect(mocks.toast).toHaveBeenCalled()
   })
 
@@ -99,5 +100,31 @@ describe('my AI account', () => {
     const cfg = mocks.confirmSheet.mock.calls.at(-1)[0]
     await act(async () => { await cfg.onConfirm() })
     expect(mocks.disconnect).toHaveBeenCalled()
+  })
+
+  it('offers the effort for the models that take one, and hides it for those that do not', async () => {
+    await mount({ authMode: 'profile', canConnect: true, connected: false, providers: PROVIDERS })
+    mocks.models = vi.fn(() => Promise.resolve({ ok: true, models: ['deepseek-v4.1-flash', 'glm-5.3-flash'] }))
+    mocks.connect = vi.fn(() => Promise.resolve({ ok: true }))
+
+    // Anthropic has no such control: key in, models listed, and still one select only.
+    await type(container.querySelector('input[type="password"]'), 'sk-ant-test')
+    await click(byText(/Check my key and list models/))
+    expect([...container.querySelectorAll('select')].length).toBe(1)
+    expect(container.textContent).not.toContain('Esfuerzo')
+
+    // The gateway's DeepSeek models do. Switching chip re-renders the form for that provider.
+    await click(byText(/OpenCode Go/))
+    await type(container.querySelector('input[type="password"]'), 'sk-oc-test')
+    await click(byText(/Check my key and list models/))
+    expect([...container.querySelectorAll('select')].length).toBe(1)
+
+    // A DeepSeek default model brings the effort picker out with its options.
+    await mount({ authMode: 'profile', canConnect: true, connected: false, providers: [
+      { ...PROVIDERS[2], defaultModel: 'deepseek-v4.1-flash' }
+    ] })
+    const effortSel = [...container.querySelectorAll('select')].find(s => [...s.querySelectorAll('option')].some(o => o.value === 'off'))
+    expect(effortSel).toBeTruthy()
+    expect([...effortSel.querySelectorAll('option')].map(o => o.value)).toEqual(['', 'off', 'low', 'medium', 'high', 'max'])
   })
 })

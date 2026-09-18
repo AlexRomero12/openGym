@@ -17,7 +17,7 @@ import { modeOf, isBw, isPerSide, cleanupSg } from './history.js'
 import { uid, todayISO, DAYN } from './format.js'
 import { mergePlan } from './plan-share.js'
 import { POLICIES } from './progression.js'
-import { t } from './i18n.js'
+import { t, exerciseNameFor } from './i18n.js'
 
 // Bumping this re-prompts everyone: it means what we share, or who we share it with, changed.
 export const CONSENT_VERSION = 1
@@ -590,11 +590,29 @@ export function recordDebrief(s, proposal) {
 
 /* ============================ display helpers ============================ */
 
-export const exName = id => EXIDX[id]?.n || t('Unknown exercise')
-// Catalogue names are lower-case; a title reads better with each word capitalised, and doing it
-// here rather than with CSS keeps a German sentence around the name from being Title Cased too.
-const cap = s => String(s || '').replace(/(^|\s)(\p{L})/gu, (m, sp, ch) => sp + ch.toUpperCase())
-export const exTitle = id => cap(exName(id))
+// The catalogue's English name is not what a Spanish lifter reads anywhere else in the app, and
+// these helpers feed the Coach cards (plan rows, change labels, the debrief's session rows).
+// exerciseNameFor is the same reader every other view uses — translated name, English in
+// parentheses when they differ, and a custom exercise's own name untouched.
+export const exName = id => {
+  const ex = EXIDX[id]
+  return ex ? exerciseNameFor(ex) : t('Unknown exercise')
+}
+export const exTitle = exName
+
+/* ============================ reasoning effort ============================ */
+
+/** The effort values a provider's metadata allows for a given model — empty when the model has
+ *  no such control (or the control is a gateway's and belongs to another vendor's models). */
+export const effortsForProvider = (meta, model) => (
+  meta?.efforts && (!meta.effortsForModels || String(model || '').toLowerCase().startsWith(meta.effortsForModels))
+    ? meta.efforts
+    : []
+)
+/** One label per effort id, in the user's language. */
+export const effortLabel = id => ({
+  off: t('Off (fastest)'), minimal: t('Minimal'), low: t('Low'), medium: t('Medium'), high: t('High'), max: t('Max')
+}[id] || id)
 
 /** Human label for a change, used on the review screen and in the log. */
 export function changeTitle(c, S) {
