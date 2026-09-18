@@ -231,8 +231,12 @@ key-per-profile.
 
 `api/coach/payload.js` is built as an allowlist: every field is copied in **by name**, nothing
 is spread and nothing is passed through, so a field added to the state blob next year cannot
-ride along by accident. The five categories it can send — the same list the consent screen
-renders from, so the screen cannot drift from the payload — are:
+ride along by accident. **Exercise names travel in the lifter's language**: the model repeats the
+catalogue it is given, so the library, the plan and the session entries carry the curated
+translated name when this build has that language (`api/coach/core/exercise-names.js`, generated
+from the frontend packs — Spanish, Portuguese and Hungarian today) and the catalogue's English
+otherwise. Custom exercises keep the name their owner gave them. The five categories it can send
+— the same list the consent screen renders from, so the screen cannot drift from the payload — are:
 
 | Category | What it covers |
 | --- | --- |

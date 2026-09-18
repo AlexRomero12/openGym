@@ -78,6 +78,20 @@ indica aparte (la traducción se propone en el **PR #245**).
   (`jobs.js`, la sesión es el seudónimo del perfil) y el móvil (`coach-local.js`, el handle del
   dispositivo). Validado contra el gateway real con la credencial de Alex (`glm-5.3-flash`):
   con headers responde `{"coach_contract":1,"ok":true}`; sin ellos, el 400.
+- 🗣️ **Los nombres que ve el Entrenador siguen el idioma del perfil.** El modelo repite el catálogo
+  que recibe: `api/coach/core/exercise-names.js` (generado de los packs del frontend por
+  `scripts/build-coach-assets.mjs`) alimenta `libraryName(id, lang)`, y el payload lo usa en el plan,
+  la biblioteca, la sesión y los pesos de trabajo; los ejercicios propios conservan su nombre. El
+  prompt aclara que llegan ya traducidos. Validado con un debrief real contra el gateway: «peso
+  muerto rumano», «sentadilla búlgara»… (los debriefs ya guardados no se reescriben).
+- ⏱️ **Cuestionario: el wheel de duración aguanta cualquier valor guardado** (47 min, 5 h) en vez de
+  caer a 00:00 cuando no cae en su paso de 5 min, y el desplegable nativo sigue el tema. Validado en
+  Chromium, Firefox y WebKit con `playwright-cli`.
+- 🏷️ **Chips de equipamiento del cuestionario traducidos** (`t(e)` + `chip nocap`, el patrón de
+  Biblioteca) con test que exige nombre en español para cada equipamiento del catálogo; también la
+  descripción de cada objetivo/experiencia y las 5 categorías del consentimiento, que quedaban en
+  inglés. En Windows, `prompts.test.js` deja de fallar por CRLF (normalizado en el generador y en el
+  test).
 
 ## v1.3.7 — 2026-09-12
 
