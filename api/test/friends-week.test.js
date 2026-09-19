@@ -1,8 +1,8 @@
-/* Territorios semanales: `weekExercises` lleva el mejor e1RM de ESTA semana por ejercicio
- * (api/friends.js). El mapa del frontend agrega por músculo y exige dos contendientes, así que
- * acá se fija lo que el contrato promete: solo la semana en curso (no el récord histórico), un
- * ejercicio hecho por una sola persona igual viaja, sin bodyweight no hay `rel`, y los
- * calentamientos no cuentan. */
+/* Semana en curso: `weekExercises` y «Por ejercicio» llevan el mejor e1RM de ESTA semana por
+ * ejercicio (api/friends.js). El mapa del frontend agrega por músculo y exige dos contendientes,
+ * así que `weekExercises` manda hasta un ejercicio de una sola persona; la lista «Por ejercicio»
+ * conserva el mínimo de 2 y el Top N. Acá se fija el contrato: solo la semana en curso (nunca el
+ * récord histórico), sin bodyweight no hay `rel`, y los calentamientos no cuentan. */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { buildRanking } from '../friends.js'
@@ -26,7 +26,7 @@ const sets = (...list) => ({ sets: list.map(([w, r]) => ({ w, r, done: true })) 
 const rank = (a, b, now = NOW) =>
   buildRanking({ users: USERS, states: new Map([['a', a], ['b', b]]) }, CONFIG, now, 'rel')
 
-test('weekExercises trae lo de la semana, no el récord histórico', () => {
+test('weekExercises y «Por ejercicio» traen lo de la semana, no el récord histórico', () => {
   const a = state([
     workout('2026-09-16', [{ id: '0043', ...sets([100, 5]) }]),   // 116.7 / 80 = 1.5
     workout('2026-08-01', [{ id: '0043', ...sets([200, 1]) }]),   // récord viejo: 200 / 80 = 2.5
@@ -34,21 +34,25 @@ test('weekExercises trae lo de la semana, no el récord histórico', () => {
   const b = state([workout('2026-09-15', [{ id: '0043', ...sets([50, 5]) }])])   // 0.7
   const out = rank(a, b)
   assert.deepEqual(out.weekExercises, [{ id: '0043', entries: [{ uid: 'a', rel: 1.5 }, { uid: 'b', rel: 0.7 }] }])
-  assert.equal(out.exercises.find(e => e.id === '0043').entries.find(e => e.uid === 'a').rel, 2.5,
-    '«Por ejercicio» sigue usando el histórico')
+  const list = out.exercises.find(e => e.id === '0043').entries
+  assert.equal(list.find(e => e.uid === 'a').rel, 1.5, '«Por ejercicio» también compara la semana')
+  assert.equal(list.find(e => e.uid === 'a').improved, false, 'bajar del récord viejo no es mejora de la semana')
+  assert.equal(list.find(e => e.uid === 'b').improved, true, 'estrenar el ejercicio en la semana sí lo es')
 })
 
-test('un ejercicio de una sola persona entra igual (el mapa decide por músculo)', () => {
+test('un ejercicio de una sola persona entra igual a weekExercises (el mapa decide por músculo)', () => {
   const a = state([workout('2026-09-16', [{ id: '0585', ...sets([40, 10]) }])])   // 53.3 / 80 = 0.7
   const out = rank(a, state([]))
   assert.deepEqual(out.weekExercises, [{ id: '0585', entries: [{ uid: 'a', rel: 0.7 }] }])
-  assert.equal(out.exercises.length, 0, 'la lista histórica sigue exigiendo 2+')
+  assert.equal(out.exercises.length, 0, 'la lista semanal sigue exigiendo 2+')
 })
 
-test('la semana pasada no cuenta', () => {
+test('la semana pasada no cuenta para ninguna de las dos', () => {
   const a = state([workout('2026-09-10', [{ id: '0043', ...sets([100, 5]) }])])
   const b = state([workout('2026-09-11', [{ id: '0043', ...sets([50, 5]) }])])
-  assert.deepEqual(rank(a, b).weekExercises, [])
+  const out = rank(a, b)
+  assert.deepEqual(out.weekExercises, [])
+  assert.deepEqual(out.exercises, [])
 })
 
 test('sin bodyweight no hay rel y el ejercicio no entra', () => {

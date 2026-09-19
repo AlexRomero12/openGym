@@ -222,14 +222,17 @@ export default function Friends() {
         </>}
       </div>}
 
-      {data.exercises.length > 0 && <>
+      {data.participantCount > 0 && <>
         <h4 className="sec">
-          Por ejercicio · {norm === 'rel' ? '1RM estimado relativo (× peso)' : 'mejor 1RM estimado (Epley)'}
+          Por ejercicio · esta semana · {norm === 'rel' ? '1RM estimado relativo (× peso)' : 'mejor 1RM estimado (Epley)'}
         </h4>
         <div className="dim small" style={{ margin: '0 4px 10px', lineHeight: 1.4 }}>
-          Barras relativas al líder · ▲▼ vs semana anterior · «Progreso» muestra la evolución de cada uno.
+          Mejor marca de la semana de cada uno · barras relativas al líder · ▲▼ vs semana anterior · «Progreso» muestra la evolución de cada uno.
         </div>
       </>}
+      {data.participantCount > 0 && data.exercises.length === 0 && <div className="card dim" style={{ padding: 20 }}>
+        Nadie entrenó los mismos ejercicios esta semana todavía. Cuando coincidan, se comparan acá.
+      </div>}
       {data.exercises.map(ex => {
         const keys = ex.entries.map(e => (norm === 'rel' ? e.rel : e.est))
         const maxV = Math.max(...keys.filter(v => v != null), 0)

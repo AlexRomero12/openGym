@@ -66,8 +66,10 @@ indica aparte (la traducción se propone en el **PR #245**).
   hecho una sola persona; sin peso corporal no hay score) y `lib/territory.js` agrega por músculo,
   exige los dos contendientes recién ahí y cae a los secundarios marcando `direct:false` cuando
   nadie lo trabaja directo. Con un api viejo se usa la última semana de `series`, que es la misma
-  ventana. Tests: `api/test/friends-week.test.js` fija el contrato y `lib/territory.test.js` el
-  reparto.
+  ventana. Y **«Por ejercicio» deja de mezclar el récord histórico**: compara el mejor e1RM de la
+  semana en curso (mismo mínimo de 2 y Top N), así una marca de hace un año ya no aparece en un
+  ranking que dice «semana a semana»; el «▲▼» y el mini-gráfico de 4 semanas siguen igual.
+  Tests: `api/test/friends-week.test.js` fija el contrato y `lib/territory.test.js` el reparto.
 - 📣 **Social V1 — Actividad + Rutinas** (`api/social.js`, `data/social.json`). Feed de sesiones
   terminadas como snapshot (rutina, minutos, volumen, series, **destacados en kg**, PRs),
   reacciones **🔥👏💪**, borrar lo propio y **auto-publicación opt-in** (`social.autoShare`); y

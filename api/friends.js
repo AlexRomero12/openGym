@@ -301,7 +301,6 @@ export function buildRanking({ users, states }, config, now = new Date(), norm =
     const byWeek = weeks.map(x => weekMetrics(S, x))
     const week = byWeek[0]
     const lastWorkout = S.workouts.reduce((m, w) => (w && w.d && (!m || w.d > m) ? w.d : m), null)
-    const all = bestLifts(S)
     // Cuántas veces aparece cada ejercicio en sus entrenos (criterio «los que más hagamos»).
     const sessions = new Map()
     for (const w of S.workouts) for (const e of (w.entries || [])) if (e && e.id != null) sessions.set(e.id, (sessions.get(e.id) || 0) + 1)
@@ -340,7 +339,7 @@ export function buildRanking({ users, states }, config, now = new Date(), norm =
       },
       streakWeeks: flags.streak ? streakOf(S, ws) : null,
       lastWorkout,
-      _weekKg: week, _byWeek: byWeek, _volRank: volRank, _all: all, _thisWeek: thisWeek, _weekAll: weekAll, _sessions: sessions,
+      _weekKg: week, _byWeek: byWeek, _volRank: volRank, _thisWeek: thisWeek, _weekAll: weekAll, _sessions: sessions, _prior: prior,
       _impr: impr, _toKg: toKg, _bw: bw,
     })
   }
@@ -371,16 +370,20 @@ export function buildRanking({ users, states }, config, now = new Date(), norm =
   const byStreak = participants.filter(p => p.shares.streak).sort((a, b) => b.streakWeeks - a.streakWeeks || vr(b) - vr(a) || a.name.localeCompare(b.name))
   const ranking = { volume: byVolume.map(p => p.uid), compliance: byCompliance.map(p => p.uid), streak: byStreak.map(p => p.uid) }
 
+  // «Por ejercicio» también es semanal: compara el mejor e1RM de CADA persona en la semana en
+  // curso. Antes usaba su récord histórico, y una marca de hace un año aparecía en un ranking
+  // que dice «semana a semana». `improved` marca al que superó su mejor anterior (o estrena el
+  // ejercicio), que es la única lectura de PR que tiene sentido dentro de la semana.
   const exMap = new Map()
   for (const p of participants) {
     if (!p.shares.lifts) continue
-    for (const [id, best] of p._all.entries()) {
+    for (const [id, best] of p._thisWeek.entries()) {
       const bwSet = bwAt(p._bw, best.d)
       const estKg = best.est * p._toKg
       const score = rel ? (bwSet ? estKg / bwSet : null) : estKg
       if (score == null) continue
       if (!exMap.has(id)) exMap.set(id, [])
-      const wk = p._thisWeek.get(id) || null
+      const before = p._prior.get(id)
       // Serie por semana (vieja → nueva) para el gráfico «Ver progreso»; trend = últimos dos
       // valores disponibles (la comparación es sobre la misma métrica del ranking).
       const series = []
@@ -397,7 +400,7 @@ export function buildRanking({ users, states }, config, now = new Date(), norm =
       exMap.get(id).push({
         uid: p.uid, _score: score, _kg: estKg, est: display(estKg), w: display(best.w * p._toKg), r: best.r, d: best.d,
         rel: bwSet ? round1(estKg / bwSet) : null,
-        improved: !!wk && wk.est >= best.est - 1e-9 && wk.d === best.d,
+        improved: !before || best.est > before.est + 1e-9,
         series, trend: trendOf(series.map(s => (rel ? s.rel : s.est))),
       })
     }
@@ -428,10 +431,11 @@ export function buildRanking({ users, states }, config, now = new Date(), norm =
     .map(({ _heavy, ...ex }) => ex)
 
   // Territorios semanales: el mejor e1RM de CADA ejercicio en la semana en curso, por
-  // participante. A diferencia de `exercises` (histórico, mínimo de 2 y Top N), acá entra todo
-  // ejercicio con datos de esta semana aunque lo haya hecho una sola persona — el mapa agrega
-  // por músculo del lado del frontend y recién ahí exige dos contendientes. Solo viaja `rel`
-  // (el mapa siempre compara ×peso); sin bodyweight no hay score y el ejercicio no entra.
+  // participante. A diferencia de `exercises` (mismo dato de la semana, con mínimo de 2
+  // participantes y recorte Top N), acá entra todo ejercicio con datos de esta semana aunque lo
+  // haya hecho una sola persona — el mapa agrega por músculo del lado del frontend y recién ahí
+  // exige dos contendientes. Solo viaja `rel` (el mapa siempre compara ×peso); sin bodyweight no
+  // hay score y el ejercicio no entra.
   const weekExMap = new Map()
   for (const p of participants) {
     if (!p.shares.lifts) continue
