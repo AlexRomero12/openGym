@@ -51,6 +51,11 @@ export function convertStateUnit(S, to) {
   if (Array.isArray(S.bodyweight)) out.bodyweight = S.bodyweight.map(b => ({ ...b, w: c(b.w) }))
   if (S.targetW != null) out.targetW = c(S.targetW)
   if (S.exWeights) out.exWeights = Object.fromEntries(Object.entries(S.exWeights).map(([k, v]) => [k, v && typeof v === 'object' ? { ...v, w: c(v.w) } : c(v)]))
+  // A Coach load confirmed for an upcoming session is a weight like any other; leaving it in
+  // the old unit would start that session on a number from a different scale.
+  if (S.prefill) out.prefill = Object.fromEntries(Object.entries(S.prefill).map(([iso, day]) => [iso, {
+    ...day, ex: Object.fromEntries(Object.entries(day?.ex || {}).map(([id, p]) => [id, { ...p, w: c(p?.w) }]))
+  }]))
   if (S.barWeights) out.barWeights = Object.fromEntries(Object.entries(S.barWeights).map(([k, v]) => [k, c(v)]))
   if (Array.isArray(S.routines)) out.routines = S.routines.map(r => ({ ...r, ex: (r.ex || []).map(cfg => convTarget(cfg, from, to)) }))
   if (Array.isArray(S.workouts)) out.workouts = S.workouts.map(w => ({ ...w, entries: (w.entries || []).map(e => convEntry(e, from, to)) }))

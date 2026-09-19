@@ -67,4 +67,47 @@ describe('buildSessionEntries', () => {
     const r = { id: 'r', prog: 'off', ex: [{ id: '0025', sets: 3, reps: 5, weight: 60 }] }
     expect(buildSessionEntries(st, r)[0].rid).toBeUndefined()
   })
+
+  /* The Coach's confirmed loads: they win over what the engine would load, for this build only,
+     and they leave the plan and the history exactly as they were. */
+  describe('a confirmed Coach load', () => {
+    const progressed = () => ({
+      unit: 'kg', exWeights: {}, routines: [],
+      workouts: [1, 2, 3].map(n => ({
+        d: `2026-01-0${n}`,
+        entries: [{ id: '0025', target: { sets: 3, reps: 5, weight: 60 }, sets: [5, 5, 5].map(r => ({ w: 60, r, done: true })) }]
+      }))
+    })
+    const r = { id: 'r', prog: 'linear', ex: [{ id: '0025', sets: 3, reps: 5, weight: 60, prog: 'linear', warmupSets: 1 }] }
+
+    it('overrides the prescribed weight on every work row, and on the target', () => {
+      const plain = buildSessionEntries(progressed(), r)
+      expect(plain[0].plan.kind).toBe('up')
+      expect(plain[0].target.weight).toBe(plain[0].plan.weight)
+
+      const coached = buildSessionEntries(progressed(), r, { prefill: { '0025': { w: 55 } } })
+      const work = coached[0].sets.filter(s => !isWarmupRow(s))
+      expect(work.every(s => s.w === 55)).toBe(true)
+      expect(coached[0].target.weight).toBe(55)
+      expect(coached[0].plan.weight).toBe(62.5, 'the engine’s own reading is untouched')
+    })
+
+    it('ramps the warm-ups toward the coached weight, not the engine’s', () => {
+      const coached = buildSessionEntries(progressed(), r, { prefill: { '0025': { w: 55 } } })
+      const warm = coached[0].sets.filter(isWarmupRow)
+      expect(warm.length).toBeGreaterThan(0)
+      expect(warm.every(s => s.w < 55)).toBe(true)
+    })
+
+    it('ignores the override for another exercise, and for cardio', () => {
+      const other = buildSessionEntries(progressed(), r, { prefill: { '9999': { w: 10 } } })
+      expect(other[0].target.weight).toBe(other[0].plan.weight)
+      const cardio = buildSessionEntries(
+        { unit: 'kg', workouts: [], exWeights: {}, routines: [] },
+        { id: 'r', prog: 'off', ex: [{ id: '0025', mode: 'cardio', sets: 1, min: 20, speed: 8 }] },
+        { prefill: { '0025': { w: 12 } } }
+      )
+      expect(cardio[0].sets.every(s => s.w == null)).toBe(true)
+    })
+  })
 })

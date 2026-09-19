@@ -17,6 +17,7 @@
 //     riding into a backup or a sync.
 import * as payloadLib from '../../../api/coach/core/payload.js'
 import { runPipeline } from '../../../api/coach/core/pipeline.js'
+import { nextTrainingDay } from '../../../api/coach/core/plan-read.js'
 import { HTTP_PROVIDERS, baseUrlFor } from '../../../api/coach/core/providers.js'
 import { gatewayHeaders } from '../../../api/coach/core/gateway-headers.js'
 import anthropic from '../../../api/coach/core/adapters/anthropic.js'
@@ -100,6 +101,19 @@ export const localRefine = async (S, text) => {
   return start(S, 'create', { refine: String(text || '').slice(0, 1000), previous: pendingCreate?.bundle || null, iteration: (pendingCreate?.iteration || 1) + 1 })
 }
 export const localDebrief = (S, workoutId) => start(S, 'debrief', { workoutId: workoutId || null })
+export const localAsk = (S, question, exId) => start(S, 'ask', {
+  question: question ? String(question).slice(0, 1000) : null,
+  exId: exId ? String(exId).slice(0, 40) : null
+})
+export const localLoads = (S, routineIds) => {
+  const ids = Array.isArray(routineIds) && routineIds.length ? routineIds.slice(0, 7) : null
+  // The same "there is nothing to answer about" the server gives, checked here because there
+  // is no route on a phone to turn it into a status code for us.
+  if (!nextTrainingDay(S, todayISO(), { routineIds: ids })) {
+    throw Object.assign(new Error(t('There is no routine to estimate loads for yet — build a plan first.')), { status: 400, code: 'noplan' })
+  }
+  return start(S, 'loads', { routineIds: ids })
+}
 export async function localResolve() { await saveCoachDevice({ pending: null }); return { ok: true } }
 export async function localForget() { job = null; lastError = null; await saveCoachDevice({ pending: null, daily: null }); return { ok: true } }
 
@@ -146,7 +160,11 @@ async function start(S, kind, opts) {
 async function run(S, kind, opts, d, adapter) {
   const key = await getApiKey()
   const payload = payloadLib.build(S, {
-    handle: await handle(), kind, intake: opts.intake, note: opts.note, refine: opts.refine, previous: opts.previous, workoutId: opts.workoutId
+    handle: await handle(), kind, intake: opts.intake, note: opts.note, refine: opts.refine, previous: opts.previous, workoutId: opts.workoutId,
+    question: opts.question, exId: opts.exId, routineIds: opts.routineIds,
+    // This phone pays its own provider, so there is no instance budget to protect: the fuller
+    // picture costs the owner of the key and nobody else.
+    depth: 'full'
   })
   const attempt = await runPipeline({
     adapter, cfg: cfgOf(d), kind, payload,
@@ -175,6 +193,8 @@ async function run(S, kind, opts, d, adapter) {
     id: job.id, kind, createdAt: Date.now(), expiresAt: Date.now() + PENDING_DAYS * 86400000,
     planHash: planHash(S), iteration: opts.iteration || 1,
     ...(kind === 'debrief' ? { workout: workoutMetaOf(S, opts.workoutId) } : {}),
+    // The question and its focus are the card's context; the answer itself arrives below.
+    ...(kind === 'ask' ? { question: opts.question || null, exId: opts.exId || null } : {}),
     ...attempt.result
   }
   await saveCoachDevice({ pending })

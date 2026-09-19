@@ -2,8 +2,9 @@ import { describe, it, expect } from 'vitest'
 import {
   canonicalPlan, planHash, hashPlan, markStale, applicable, currentValue,
   pushSnapshot, revertLast, canRevert, appendLog, applyChangeSet, applyCreatedPlan,
-  recordDismissal, validateProposal, coachAvailable, hasConsent,
-  recordDebrief, logEntry, lightBundle, changeValues,
+  recordDismissal, validateProposal, coachAvailable, hasConsent, emptyCoach,
+  recordDebrief, recordAnswer, applyLoads, logEntry, lightBundle, changeValues,
+  holdProposal, releaseProposal, heldId,
   CHANGE_TYPES, SNAPSHOT_MAX, LOG_MAX, CONSENT_VERSION
 } from './coach.js'
 import { registerCustom } from './exercises.js'
@@ -14,7 +15,7 @@ import * as serverPayload from '../../../api/coach/core/payload.js'
 import { hashPlan as serverHashPlan } from '../../../api/coach/core/plan-hash.js'
 
 const state = (over = {}) => ({
-  unit: 'kg', lang: 'en', customEx: [], workouts: [], bodyweight: [], exWeights: {}, dayPlan: {},
+  unit: 'kg', lang: 'en', customEx: [], workouts: [], bodyweight: [], exWeights: {}, dayPlan: {}, prefill: {},
   routines: [{
     id: 'r1', name: 'Full body A', emoji: '💪', prog: 'linear',
     ex: [
@@ -651,5 +652,83 @@ describe('what the log keeps, so a decision never makes a proposal vanish', () =
     expect(b.basedOn).toBeUndefined()
     expect(Object.keys(b.routines[0].ex[0])).not.toContain('secret')
     expect(lightBundle(null)).toBeNull()
+  })
+})
+
+describe('the Coach’s answers and next-session loads', () => {
+  const loads = (over = {}) => ({
+    id: 'l1', kind: 'loads', target: { iso: '2026-09-19', weekday: 6 }, summary: 's',
+    changes: [{ id: 'w1', type: 'weight', target: { routineId: 'r1', exId: '0001' }, before: 20, after: 22.5, why: 'hit every target' }],
+    notes: [], ...over
+  })
+
+  it('a confirmed load lands in S.prefill for its date, and the plan is untouched', () => {
+    const s = JSON.parse(JSON.stringify(state()))
+    const res = applyLoads(s, loads(), ['w1'])
+    expect(res.applied).toBe(1)
+    expect(s.prefill['2026-09-19'].ex['0001'].w).toBe(22.5)
+    expect(s.routines[0].ex[0].weight).toBe(20, 'the routine is never edited by a load')
+    expect(s.coach.snapshots).toHaveLength(0, 'nothing to revert: no plan change happened')
+    const e = logEntry(s, res.logId)
+    expect(e.kind).toBe('loads')
+    expect(e.date).toBe('2026-09-19')
+    expect(e.decisions[0]).toMatchObject({ id: 'w1', status: 'accepted', before: 20, after: 22.5 })
+  })
+
+  it('an unaccepted load is recorded as declined and never written', () => {
+    const s = JSON.parse(JSON.stringify(state()))
+    const res = applyLoads(s, loads(), [])
+    expect(res.applied).toBe(0)
+    expect(s.prefill).toEqual({})
+    expect(logEntry(s, res.logId || 'x')).toBeNull()   // nothing to log when nothing was chosen
+  })
+
+  it('a load whose exercise left the routine cannot be applied', () => {
+    const s = JSON.parse(JSON.stringify(state()))
+    s.routines = s.routines.map(r => r.id === 'r1' ? { ...r, ex: (r.ex || []).filter(e => e.id !== '0001') } : r)
+    const marked = markStale(loads(), s)
+    expect(applicable(marked)).toHaveLength(0)
+    const res = applyLoads(s, marked, ['w1'])
+    expect(res.applied).toBe(0)
+    expect(s.prefill).toEqual({})
+  })
+
+  it('a load proposal dismissed whole is kept with kind loads and does not move the review date', () => {
+    const s = JSON.parse(JSON.stringify(state()))
+    const id = recordDismissal(s, loads())
+    expect(logEntry(s, id).kind).toBe('loads')
+    expect(logEntry(s, id).dismissed).toBe(true)
+    expect(s.coach.lastReview).toBeUndefined()
+  })
+
+  it('an answer is filed whole, with its question', () => {
+    const s = JSON.parse(JSON.stringify(state()))
+    const id = recordAnswer(s, { id: 'a1', kind: 'ask', question: '¿cuánto levanto?', title: 'Press', answer: 'Unos **26.7 kg**.', notes: ['n'], exId: '0001' })
+    expect(logEntry(s, id)).toMatchObject({ kind: 'answer', question: '¿cuánto levanto?', title: 'Press', exId: '0001', notes: ['n'] })
+    expect(logEntry(s, id).answer).toContain('26.7')
+  })
+
+  it('CHANGE_TYPES still has no weight — only the loads path writes one', () => {
+    expect(CHANGE_TYPES).not.toContain('weight')
+  })
+})
+
+describe('holding a proposal for later', () => {
+  it('holds without deciding anything, and releases back to the card', () => {
+    const s = JSON.parse(JSON.stringify(state()))
+    holdProposal(s, 'p1')
+    expect(heldId(s)).toBe('p1')
+    expect(s.coach.log).toHaveLength(0, 'no decision was recorded')
+    expect(s.coach.snapshots).toHaveLength(0, 'nothing to revert')
+    expect(s.routines.length).toBeGreaterThan(0, 'the plan is untouched')
+    releaseProposal(s)
+    expect(heldId(s)).toBeNull()
+  })
+
+  it('ignores a hold with no id, and emptyCoach carries the field', () => {
+    const s = JSON.parse(JSON.stringify(state()))
+    holdProposal(s, '')
+    expect(heldId(s)).toBeNull()
+    expect(emptyCoach()).toMatchObject({ held: null })
   })
 })

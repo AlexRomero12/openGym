@@ -201,3 +201,42 @@ test('a debrief is enqueued as its own kind, and the cohort routes gate on the a
   while (jobs.status('admin-1').job && Date.now() < until) await new Promise(res => setTimeout(res, 25));
   assert.equal(jobs.status('admin-1').last.errorClass, 'noworkout');
 });
+
+/** Wait until this profile has no job in flight, the way the client polls. */
+async function settleJobs(jobs, uid, ms = 15000) {
+  const until = Date.now() + ms;
+  while (jobs.status(uid).job && Date.now() < until) await new Promise(r => setTimeout(r, 25));
+}
+
+/* ---------- ask + loads routes ---------- */
+test('ask and loads are enqueued as their own kinds, and loads with nothing to load is refused', async () => {
+  fresh();
+  const jobs = await import('../coach/jobs.js');
+  const { writeState, sampleState } = await import('./helpers.mjs');
+  const { forcePrivilegeVerdict } = await import('../coach/adapters/spawn.js');
+  forcePrivilegeVerdict({ ok: true, dropped: false, why: 'pinned by the test suite' });
+  writeState(process.env.DATA_DIR, 'admin-1', sampleState());
+  // A job the previous test left in flight would make the first enqueue a 409; forgetting the
+  // profile drops it, which is also what the single-flight rule exists to do.
+  jobs.clearUser('admin-1');
+  const { call } = harness();
+
+  const ask = await call('POST /api/coach/ask', { question: '¿cuánto levanto en press?', exId: '0001' });
+  assert.equal(ask.status, 202);
+  assert.equal(jobs.status('admin-1').job.kind, 'ask');
+  // One job per profile at a time: let this one finish before the next, exactly as the client
+  // would. Whether the provider answers or fails does not matter to what is being pinned here.
+  await settleJobs(jobs, 'admin-1');
+
+  const loads = await call('POST /api/coach/loads', {});
+  assert.equal(loads.status, 202);
+  assert.equal(jobs.status('admin-1').job.kind, 'loads');
+  await settleJobs(jobs, 'admin-1');
+
+  // A plan with no exercises to train has no next session, and the route says so instead of
+  // queueing a job whose only possible answer is a failure.
+  writeState(process.env.DATA_DIR, 'admin-1', sampleState({ routines: [], week: {} }));
+  const none = await call('POST /api/coach/loads', {});
+  assert.equal(none.status, 400);
+  assert.equal(none.body.code, 'noplan');
+});

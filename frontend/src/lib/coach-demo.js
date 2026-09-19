@@ -13,10 +13,11 @@
 // replaces at build time.
 
 import { EXIDX, EXDB } from './exercises.js'
-import { modeOf, workoutVolume } from './history.js'
+import { modeOf, workoutVolume, nextTrainingDay, effectiveRoutines } from './history.js'
+import { nextPrescription } from './progression.js'
 import { isWarmupRow } from './workout-model.js'
 import { best1RM } from './onerm.js'
-import { fmtNum } from './format.js'
+import { fmtNum, todayISO } from './format.js'
 import { planHash } from './coach.js'
 import { t } from './i18n.js'
 
@@ -141,6 +142,71 @@ function buildDebrief(S, workoutId) {
   }
 }
 
+/** An answer to a question, quoting the app's own numbers instead of inventing any. */
+function buildAsk(S, question, exId) {
+  const plan = (S.routines || []).flatMap(r => r.ex || [])
+  const id = exId || plan[0]?.id || null
+  const name = id ? (EXIDX[id]?.n || id) : null
+  const best = id ? best1RM(S, id) : null
+  const answer = best
+    ? t('## Estimated 1RM\nYour best estimate is **{0} kg**, from a set of **{1}×{2}** on {3}.\n\n- It comes from the Epley formula over your best recent set.\n- If the last sessions hit their target, the next load steps up; if they did not, it repeats.', fmtNum(best.est), best.w, best.r, best.d)
+    : t('There are no logged sets for {0} yet, so there is no honest 1RM to estimate. Train a session and ask me again.', name || t('this exercise'))
+  return {
+    id: 'demo-ask', kind: 'ask', createdAt: Date.now(), expiresAt: Date.now() + 864e5,
+    planHash: planHash(S), iteration: 1,
+    question: question || null, exId: id,
+    title: name ? t('{0} · estimated 1RM', name) : t('Estimated 1RM'),
+    answer,
+    notes: [t('Log an effort rating on your top sets and the next estimate is sharper.')]
+  }
+}
+
+/** Next-session weights, computed with the same engine the workout screen uses. */
+function buildLoads(S, routineIds) {
+  const only = [].concat(routineIds || []).filter(Boolean)[0] || null
+  let target = nextTrainingDay(S, todayISO())
+  if (only) {
+    target = null
+    for (let i = 1; i <= 7; i++) {
+      const d = new Date(todayISO() + 'T12:00:00')
+      d.setDate(d.getDate() + i)
+      const iso = d.toISOString().slice(0, 10)
+      const routines = effectiveRoutines(S, iso).filter(r => r.id === only)
+      if (routines.some(r => (r.ex || []).length)) {
+        target = { iso, weekday: d.getDay(), routines, routine: routines[0] }
+        break
+      }
+    }
+  }
+  if (!target) return null
+  const changes = []
+  target.routines.forEach(r => (r.ex || []).forEach(cfg => {
+    if (changes.length >= 6) return
+    const p = nextPrescription(S, cfg, r)
+    const w = p.kind === 'first' ? cfg.weight : p.weight
+    if (!(w > 0)) return
+    changes.push({
+      id: 'wd' + changes.length,
+      type: 'weight',
+      target: { routineId: r.id, exId: cfg.id },
+      before: cfg.weight ?? null,
+      after: Math.round(w * 100) / 100,
+      why: t('The last session was completed as prescribed, so this one steps up from it.'),
+      routineName: r.name
+    })
+  }))
+  if (!changes.length) return null
+  return {
+    id: 'demo-loads', kind: 'loads', createdAt: Date.now(), expiresAt: Date.now() + 864e5,
+    planHash: planHash(S), iteration: 1,
+    target: { iso: target.iso, weekday: target.weekday },
+    summary: t('Weights estimated from your last sessions. Confirm the ones you agree with and I will load them for that session.'),
+    evidence: { from: null, to: null, sessions: (S.workouts || []).length },
+    changes,
+    notes: []
+  }
+}
+
 /** What "the room" would say on a busy instance — five people, plausible medians, your real bests. */
 export function demoCohort(S) {
   const since = Date.now() - 56 * 864e5
@@ -174,6 +240,11 @@ export const demoRefine = S => start('create', () => {
 export const demoDebrief = (S, workoutId) => {
   if (!(S.workouts || []).some(w => w && w.d)) throw Object.assign(new Error(t('There is no workout to look at yet — log one first.')), { status: 409, code: 'noworkout' })
   return start('debrief', () => buildDebrief(S, workoutId))
+}
+export const demoAsk = (S, question, exId) => start('ask', () => buildAsk(S, question, exId))
+export const demoLoads = (S, routineIds) => {
+  if (!nextTrainingDay(S, todayISO())) throw Object.assign(new Error(t('There is no routine to estimate loads for yet — build a plan first.')), { status: 400, code: 'noplan' })
+  return start('loads', () => buildLoads(S, routineIds))
 }
 export const demoResolve = () => { pending = null; return { ok: true } }
 export const demoDisclosure = () => ({

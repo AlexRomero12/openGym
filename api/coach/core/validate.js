@@ -569,3 +569,119 @@ export function validateDebrief(data) {
   if (errors.length) return fail(errors);
   return { ok: true, proposal: { summary: clampStr(data.summary.trim(), 600), score, ...lists } };
 }
+
+/* =============================== answers =============================== */
+
+/**
+ * Validate an answer — prose about the lifter's own data, with nothing to apply.
+ *
+ * Same posture as a debrief: the closed list of change types does not apply because an answer
+ * cannot carry a change at all, and one that tries is refused rather than trimmed. The prose
+ * is clamped like every other stored string; nothing about it is trusted beyond being text.
+ *
+ * Returns { ok, proposal:{ title, answer, notes } } | { ok:false, errors }.
+ */
+export function validateAsk(data) {
+  if (!data || typeof data !== 'object') return fail(['the answer was not an object']);
+  const errors = [];
+  if (Array.isArray(data.changes) && data.changes.length) {
+    errors.push('an answer carries no plan changes — put the reply in "answer" and leave "changes" out');
+  }
+  if (!isStr(data.answer)) errors.push('answer is required — the reply to the question, in the lifter\'s language');
+  if (errors.length) return fail(errors);
+  return {
+    ok: true,
+    proposal: {
+      title: clampStr(data.title || '', 80),
+      answer: clampStr(data.answer.trim(), 4000),
+      notes: (Array.isArray(data.notes) ? data.notes : []).filter(isStr).slice(0, 6).map(n => clampStr(n, 300))
+    }
+  };
+}
+
+/* =============================== next-session loads =============================== */
+
+/**
+ * Validate a load proposal: working weights for the next time the target routine is trained.
+ *
+ * Deliberately not a review. A review may not set day-to-day loads (common.md rule 4): the
+ * deterministic progression engine owns them. This task exists because the lifter asked the
+ * Coach to estimate them, and what it produces is a *suggestion* the app stores for one
+ * session, on an explicit confirmation — it never edits the routine. So the only change type
+ * accepted here is `weight`, and the review path still refuses it.
+ *
+ * `before` is read off the plan rather than the answer, like a review, but unlike a review a
+ * change whose `after` equals the plan's current `weight` is *kept*: the plan's weight is a
+ * fallback, while the session's starting weight comes from the engine or from this prefill,
+ * so "same as the plan" can still be a real proposal.
+ *
+ * Returns { ok, nochange } | { ok, proposal } | { ok:false, errors }.
+ */
+export function validateLoads(data, plan, ctx = {}) {
+  if (!data || typeof data !== 'object') return fail(['the answer was not an object']);
+  if (data.nochange) return { ok: true, nochange: true, reading: clampStr(data.reading || data.summary || '', 1200) };
+  const errors = [];
+  const routines = new Map((plan?.routines || []).map(r => [r.id, r]));
+  const list = Array.isArray(data.changes) ? data.changes : null;
+  if (!list) return fail(['changes must be an array (or set "nochange": true with a "reading")']);
+  const changes = [];
+  const seenIds = new Set();
+
+  list.slice(0, MAX_CHANGES).forEach((c, i) => {
+    const where = `changes[${i}]`;
+    if (!c || typeof c !== 'object') { errors.push(`${where} is not an object`); return; }
+    if (c.type !== 'weight') {
+      errors.push(`${where}.type must be "weight" — a load estimate proposes working weights and nothing else`);
+      return;
+    }
+    if (!isStr(c.why)) { errors.push(`${where}.why is required — every load must cite the evidence behind it`); return; }
+    const target = c.target || {};
+    const routine = target.routineId ? routines.get(target.routineId) : null;
+    if (!routine) { errors.push(`${where}.target.routineId "${target.routineId}" is not one of the routines in the plan`); return; }
+    const planned = (routine.ex || []).find(e => e.id === target.exId) || null;
+    if (!planned) { errors.push(`${where}.target.exId "${target.exId}" is not in routine "${routine.name}"`); return; }
+    if (!isNum(c.after) || c.after <= 0 || c.after > MAX_WEIGHT) {
+      errors.push(`${where}.after must be a working weight above 0 and no larger than ${MAX_WEIGHT}`);
+      return;
+    }
+    let cid = isStr(c.id) ? clampStr(c.id, 40) : 'w' + i;
+    if (seenIds.has(cid)) cid = `${cid}-${i}`;
+    seenIds.add(cid);
+    changes.push({
+      id: cid,
+      type: 'weight',
+      target: {
+        ...(isStr(target.routineId) ? { routineId: clampStr(target.routineId, 40) } : {}),
+        ...(isStr(target.exId) ? { exId: clampStr(target.exId, 40) } : {})
+      },
+      why: clampStr(c.why, 600),
+      routineName: clampStr(routine.name || '', 40),
+      before: planned.weight ?? null,
+      after: Math.round(c.after * 100) / 100
+    });
+  });
+
+  if (errors.length) return fail(errors);
+  if (!changes.length) {
+    return { ok: true, nochange: true, reading: clampStr(data.summary || data.reading || '', 1200) };
+  }
+  return {
+    ok: true,
+    proposal: {
+      summary: clampStr(data.summary || '', 1200),
+      evidence: {
+        from: isStr(data.evidence?.from) ? clampStr(data.evidence.from, 40) : null,
+        to: isStr(data.evidence?.to) ? clampStr(data.evidence.to, 40) : null,
+        sessions: isInt(data.evidence?.sessions, 0, 10000) ? data.evidence.sessions : null
+      },
+      // The day the proposal is about, attached server-side from the payload the job built —
+      // the client stores the prefill under this date and never parses a date out of prose.
+      target: {
+        ...(isStr(ctx.iso) ? { iso: clampStr(ctx.iso, 10) } : {}),
+        ...(isInt(ctx.weekday, 0, 6) ? { weekday: ctx.weekday } : {})
+      },
+      changes,
+      notes: (Array.isArray(data.notes) ? data.notes : []).filter(isStr).slice(0, 6).map(n => clampStr(n, 600))
+    }
+  };
+}

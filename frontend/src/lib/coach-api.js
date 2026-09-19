@@ -10,6 +10,7 @@ import { api } from './api.js'
 import { DEMO } from './demo.js'
 import { MOBILE } from './mobile.js'
 import { t } from './i18n.js'
+import { todayISO } from './format.js'
 import { useStore } from '../store/useStore.js'
 import { useUI } from '../store/useUI.js'
 
@@ -48,6 +49,14 @@ export const requestReview = async note => DEMO ? (await demo()).demoReview(S())
 export const requestPlan = async intake => DEMO ? (await demo()).demoPlan(S(), intake) : LOCAL() ? (await local()).localPlan(S(), intake) : api('/api/coach/plan', { method: 'POST', body: JSON.stringify({ intake }) })
 export const refinePlan = async text => DEMO ? (await demo()).demoRefine(S()) : LOCAL() ? (await local()).localRefine(S(), text) : api('/api/coach/plan', { method: 'POST', body: JSON.stringify({ refine: text }) })
 export const requestDebrief = async workoutId => DEMO ? (await demo()).demoDebrief(S(), workoutId) : LOCAL() ? (await local()).localDebrief(S(), workoutId) : api('/api/coach/debrief', { method: 'POST', body: JSON.stringify({ workoutId: workoutId || null }) })
+// A question, answered — nothing to apply. `exId` focuses it on one exercise when the ask came
+// from a picker; a plain question leaves it null and the server sends a compact window instead.
+export const requestAsk = async (question, exId) => DEMO ? (await demo()).demoAsk(S(), question, exId) : LOCAL() ? (await local()).localAsk(S(), question, exId) : api('/api/coach/ask', { method: 'POST', body: JSON.stringify({ question: question || '', exId: exId || null }) })
+// The weights for the next time a routine is trained. No `routineIds` means the next training
+// day as a whole; naming one asks about the next occurrence of just that routine. `today` is
+// the device's own calendar day: the server's clock may be another timezone, and "tomorrow"
+// should be the lifter's tomorrow.
+export const requestLoads = async routineIds => DEMO ? (await demo()).demoLoads(S(), routineIds) : LOCAL() ? (await local()).localLoads(S(), routineIds) : api('/api/coach/loads', { method: 'POST', body: JSON.stringify({ routineIds: routineIds || null, today: todayISO() }) })
 // The room: anonymous medians across the profiles on this instance that opted in. Only a
 // server has a room; a phone with its own key and the demo both answer locally.
 export const cohortStats = async () => DEMO ? (await demo()).demoCohort(S()) : LOCAL() ? { ok: false, enabled: false } : api('/api/coach/cohort')
@@ -150,6 +159,7 @@ export const JOB_ERRORS = {
   restart: 'The server restarted while the Coach was thinking.',
   nostate: 'The Coach couldn’t read your training data.',
   noworkout: 'There is no workout to look at yet — log one first.',
+  noplan: 'There is no routine to estimate loads for yet — build a plan first.',
   internal: 'Something went wrong on the server.'
 }
 

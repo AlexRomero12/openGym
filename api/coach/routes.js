@@ -10,6 +10,7 @@ import { computeCohort } from './cohort.js';
 import { adapterFor } from './adapters/index.js';
 import { canDropPrivileges } from './adapters/spawn.js';
 import { DATA_CATEGORIES } from './core/payload.js';
+import { nextTrainingDay } from './core/plan-read.js';
 import { validateBaseUrl, baseUrlFor, effortsFor } from './core/providers.js';
 
 // Job failures the user sees, in the app's own voice. The raw provider detail never reaches
@@ -25,9 +26,12 @@ const USER_ERROR = {
   // Verbatim, because it tells the user the one thing that resolves it and names who resolves
   // it. A vaguer message here turns into a support question for the person running the box.
   shared: cfgStore.SHARED_ACCOUNT_REFUSAL,
-  unprivileged: 'the Coach is switched off on this instance for safety reasons'
+  unprivileged: 'the Coach is switched off on this instance for safety reasons',
+  // `loads` with no routine left to estimate for: a brand-new profile, or a plan whose
+  // exercises were all removed. Nothing has gone wrong; there is just nothing to answer about.
+  noplan: 'there is no routine to estimate loads for yet — build a plan first'
 };
-const HTTP_FOR = { off: 503, busy: 409, cap: 429, consent: 403, connect: 409, shared: 409, unprivileged: 503 };
+const HTTP_FOR = { off: 503, busy: 409, cap: 429, consent: 403, connect: 409, shared: 409, unprivileged: 503, noplan: 400 };
 
 export function coachRoutes({ json, readBody, readSession, requireAdmin }) {
   /** Every user route starts the same way: signed in, feature on, feature reachable. */
@@ -99,6 +103,46 @@ export function coachRoutes({ json, readBody, readSession, requireAdmin }) {
       const body = await readBody(req);
       try {
         const job = jobs.enqueue(user.id, { kind: 'debrief', workoutId: body.workoutId ? String(body.workoutId).slice(0, 40) : null });
+        json(res, 202, { job });
+      } catch (e) { failEnqueue(res, e); }
+    },
+
+    /* A question, answered from the smallest context that can answer it. Nothing to apply:
+       the answer is kept in the log like a debrief. `exId` focuses it on one exercise when the
+       question is about one, and is simply ignored if it resolves to nothing. */
+    'POST /api/coach/ask': async (req, res) => {
+      const user = guard(req, res); if (!user) return;
+      const body = await readBody(req);
+      try {
+        const job = jobs.enqueue(user.id, {
+          kind: 'ask',
+          question: body.question ? String(body.question).slice(0, 1000) : null,
+          exId: body.exId ? String(body.exId).slice(0, 40) : null
+        });
+        json(res, 202, { job });
+      } catch (e) { failEnqueue(res, e); }
+    },
+
+    /* Working weights for the next time the target routine is trained. The job resolves the
+       day itself (the same week reader the app uses) and the proposal carries that date; the
+       client keeps it for that one session and only after the lifter confirms it. */
+    'POST /api/coach/loads': async (req, res) => {
+      const user = guard(req, res); if (!user) return;
+      const body = await readBody(req);
+      try {
+        const routineIds = Array.isArray(body.routineIds)
+          ? body.routineIds.slice(0, 7).map(id => String(id).slice(0, 40))
+          : null;
+        // The device's calendar day, when it sent one: the container may sit in a different
+        // timezone, and "tomorrow's session" must not skip a day because of that.
+        const today = typeof body.today === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.today) ? body.today : null;
+        // Checked before queueing, not only when the job runs: enqueueing spends a daily run,
+        // and a plan with no trainable routine can never answer — so there is nothing to spend
+        // it on. The job checks again for a plan edited between the two.
+        if (!nextTrainingDay(jobs.readState(user.id) || {}, today || new Date().toISOString().slice(0, 10), { routineIds })) {
+          return json(res, 400, { error: USER_ERROR.noplan, code: 'noplan' });
+        }
+        const job = jobs.enqueue(user.id, { kind: 'loads', routineIds, today });
         json(res, 202, { job });
       } catch (e) { failEnqueue(res, e); }
     },

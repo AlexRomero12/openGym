@@ -111,4 +111,57 @@ export const DEBRIEF_SCHEMA = {
   required: ['coach_contract', 'summary', 'score']
 };
 
-export const SCHEMAS = { review: REVIEW_SCHEMA, create: CREATE_SCHEMA, refine: CREATE_SCHEMA, debrief: DEBRIEF_SCHEMA };
+// A question answered, with nothing to apply. `answer` is where everything goes; `notes` is
+// the same bullet channel the review uses, for the one or two numbers worth pulling out.
+export const ASK_SCHEMA = {
+  type: 'object',
+  properties: {
+    coach_contract: { type: 'integer' },
+    title: STR,
+    answer: STR,
+    notes: STRINGS
+  },
+  required: ['coach_contract', 'answer']
+};
+
+// The next session's loads: the review shape with exactly one change type allowed. `before` is
+// read off the plan by the validator rather than trusted from the answer, same as a review;
+// `after` is required here because a weight with no number is not a proposal.
+export const LOADS_SCHEMA = {
+  type: 'object',
+  properties: {
+    coach_contract: { type: 'integer' },
+    nochange: { type: 'boolean' },
+    reading: STR,
+    summary: STR,
+    evidence: {
+      type: 'object',
+      properties: { from: STR, to: STR, sessions: { type: 'integer' } }
+    },
+    changes: {
+      type: 'array',
+      maxItems: 25,
+      items: {
+        type: 'object',
+        properties: {
+          id: STR,
+          type: STR,
+          target: {
+            type: 'object',
+            properties: { routineId: STR, exId: STR }
+          },
+          why: STR,
+          after: { type: 'number' }
+        },
+        required: ['type', 'target', 'after', 'why']
+      }
+    },
+    notes: STRINGS
+  },
+  required: ['coach_contract']
+};
+
+export const SCHEMAS = {
+  review: REVIEW_SCHEMA, create: CREATE_SCHEMA, refine: CREATE_SCHEMA, debrief: DEBRIEF_SCHEMA,
+  ask: ASK_SCHEMA, loads: LOADS_SCHEMA
+};

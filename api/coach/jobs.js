@@ -20,6 +20,7 @@ import * as cfgStore from './config.js';
 import { adapterFor } from './adapters/index.js';
 import * as payloadLib from './core/payload.js';
 import { runPipeline } from './core/pipeline.js';
+import { nextTrainingDay } from './core/plan-read.js';
 import { extractJSON } from './core/parse.js';
 import { hashPlan } from './core/plan-hash.js';
 import { buildPrompt } from './core/prompt.js';
@@ -233,12 +234,16 @@ export function enqueue(uid, opts) {
     id: crypto.randomBytes(8).toString('hex'),
     uid,
     forgetSeq: forgetSeq.get(uid) || 0,
-    kind: opts.kind,                                  // 'create' | 'review' | 'debrief'
+    kind: opts.kind,                                  // 'create' | 'review' | 'debrief' | 'ask' | 'loads'
     trigger: opts.trigger || 'manual',                // 'manual' | 'scheduled'
     workoutId: opts.workoutId ? String(opts.workoutId).slice(0, 40) : null,
     intake: opts.intake || null,
     note: opts.note || null,
     refine: opts.refine || null,
+    question: opts.question || null,                  // ask
+    exId: opts.exId || null,                          // ask, focused on one exercise
+    routineIds: Array.isArray(opts.routineIds) && opts.routineIds.length ? opts.routineIds : null,   // loads
+    today: opts.today || null,                        // loads: the client's calendar day, when sent
     state: 'queued',
     startedAt: Date.now()
   };
@@ -322,6 +327,13 @@ async function execute(job) {
   if (job.kind === 'debrief' && !payloadLib.findWorkout(S, job.workoutId)) {
     return finish(job, { outcome: 'failed', errorClass: 'noworkout' });
   }
+  // Where the loads job points: the next training day, resolved once here against the same
+  // week reader the app uses. The resolved date rides in the payload and comes back attached
+  // to the proposal, so the client never has to parse a date out of prose.
+  if (job.kind === 'loads') {
+    job.target = nextTrainingDay(S, job.today || new Date().toISOString().slice(0, 10), { routineIds: job.routineIds });
+    if (!job.target) return finish(job, { outcome: 'failed', errorClass: 'noplan' });
+  }
 
   const pendingCreate = job.refine ? readUser(job.uid).pending : null;
   const payload = payloadLib.build(S, {
@@ -330,8 +342,15 @@ async function execute(job) {
     intake: job.intake,
     note: job.note,
     refine: job.refine,
+    question: job.question,
+    exId: job.exId,
+    routineIds: job.routineIds,
+    target: job.target,
     previous: pendingCreate?.bundle || null,
     workoutId: job.workoutId,
+    // The instance account pays in instance mode, so a focused job reads a smaller slice; a
+    // profile paying its own way gets the fuller picture. Review and debrief ignore it.
+    depth: cfg.authMode === 'profile' ? 'full' : 'light',
     // The room's medians ride along on a review or a debrief when the admin allows it and
     // this person opted in; null otherwise, and the payload then carries no `cohort` at all.
     cohort: (job.kind === 'review' || job.kind === 'debrief') ? cohortForPayload(job.uid) : null
@@ -373,6 +392,9 @@ async function execute(job) {
       iteration: job.refine ? (pendingCreate?.iteration || 1) + 1 : 1,
       // A debrief names the session it read, so the card can show it after the fact.
       ...(job.kind === 'debrief' ? { workout: payloadLib.workoutMeta(S, job.workoutId) } : {}),
+      // An ask names the question and the exercise it was about: the card's context, and the
+      // id it uses to put the app's own 1RM numbers next to the prose.
+      ...(job.kind === 'ask' ? { question: job.question, exId: job.exId } : {}),
       ...attempt.result
     };
     return finish(job, { outcome: 'ready', pending });

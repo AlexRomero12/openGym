@@ -11,6 +11,9 @@
  * and appearance settings, and every other profile's everything.
  */
 import { LIBRARY, LIB_BY_ID, libraryHas, libraryName, librarySlice, MAX_LIBRARY } from './library.js';
+import { isWarmupSet } from './sets.js';
+import { best1RM, e1rmSeries } from './onerm.js';
+import { nextTrainingDay } from './plan-read.js';
 
 export const CONTRACT = 1;
 // Bounds from FR-22. A review reads a training block, not a training career: more history
@@ -45,16 +48,9 @@ export const modeOf = (cfg, ex) => {
 export const isBw = (cfg, ex) =>
   (cfg && cfg.bodyweight != null ? !!cfg.bodyweight : (ex && ex.eq) === 'body weight');
 export const isPerSide = cfg => !!(cfg && cfg.side);
-// Mirror of frontend/src/lib/workout-model.js isWarmupRow: an explicit phase wins, else the
-// legacy boolean. A warm-up row is prep, not the session: it is filtered out of the stall
-// count exactly as progression.js filters it, it never counts as a done set or a top set,
-// and where it does travel (the last few sessions in full) it is flagged so the model reads
-// "0x12 warm-up" as what it is rather than as a failed set.
-export const isWarmupSet = s => {
-  const ph = typeof s?.phase === 'string' ? s.phase.trim().toLowerCase() : '';
-  if (ph) return ph === 'warmup' || ph === 'warm-up' || ph === 'warm_up';
-  return s?.warmup === true;
-};
+// Mirror of frontend/src/lib/workout-model.js isWarmupRow, kept in core/sets.js now that
+// core/onerm.js needs it too; re-exported here so existing importers do not move.
+export { isWarmupSet };
 function readSession(entry, fallback) {
   const target = (entry && entry.target) || fallback || {};
   const ex = LIB_BY_ID.get(entry?.id);
@@ -323,6 +319,104 @@ export function workoutMeta(S, workoutId) {
   };
 }
 
+/* ---------- one exercise, held up to the light ----------
+   The two focused tasks ask about a narrower thing than a review does: one exercise ("what is
+   my 1RM on this") or one day's routine ("what should I load tomorrow"). Sending the whole
+   training window for that would be slower, costlier and no more accurate, so these builders
+   send exactly the exercise's own config and recent sessions — and the numbers the model is
+   told to quote, computed here rather than asked of it. */
+export const FOCUS_SESSIONS = { light: 4, full: 8 };
+
+/** How many weigh-ins travel: a trend needs a few, not a career. */
+function recentBodyweight(S, n) {
+  return {
+    goal: S.targetW ?? null,
+    series: (S.bodyweight || []).filter(b => b && b.d).slice(-n).map(b => ({ d: b.d, w: b.w }))
+  };
+}
+
+/** Consecutive missed sessions and the last one's verdict, as the engine counts them. */
+function stallFor(S, id) {
+  const cfg = (S.routines || []).flatMap(r => r.ex || []).find(e => e.id === id) || null;
+  const sessions = [];
+  (S.workouts || []).forEach(w => (w.entries || []).forEach(en => {
+    if (en.id !== id || !en.sets?.some(s => s.done)) return;
+    sessions.push(readSession(en, cfg));
+  }));
+  return {
+    sessions: sessions.length,
+    stalls: stallCount(sessions),
+    ...(sessions.length ? { lastOk: !!sessions[sessions.length - 1].ok } : {})
+  };
+}
+
+/** The last few times one exercise was trained: target, top set and its done sets. */
+function exerciseHistory(S, id, limit) {
+  const out = [];
+  (S.workouts || []).filter(w => w && w.d).forEach(w => {
+    const en = (w.entries || []).find(e => e.id === id);
+    if (!en) return;
+    const sets = (en.sets || []).filter(s => !isWarmupSet(s));
+    const done = sets.filter(s => s.done);
+    if (!done.length) return;
+    let top = null;
+    done.forEach(s => {
+      if (!top || (s.w || 0) * (s.r || 0) + (s.sec || 0) > (top.w || 0) * (top.r || 0) + (top.sec || 0)) top = s;
+    });
+    out.push({
+      d: w.d,
+      done: done.length + '/' + sets.length,
+      ...(en.target ? { target: fmtSet({ w: en.target.weight, r: en.target.reps, sec: en.target.sec, min: en.target.min, speed: en.target.speed }) } : {}),
+      ...(top ? { top: fmtSet(top), topW: top.w ?? null } : {}),
+      sets: done.slice(-6).map(s => {
+        const o = {};
+        if (s.w != null) o.w = s.w;
+        if (s.r != null) o.r = s.r;
+        if (s.sec != null) o.sec = s.sec;
+        if (s.min != null) o.min = s.min;
+        if (s.rir != null) o.rir = s.rir;
+        if (s.rpe != null) o.rpe = s.rpe;
+        return o;
+      })
+    });
+  });
+  return out.slice(-limit);
+}
+
+/**
+ * Everything the payload says about one exercise: its plan config with the bodyweight/per-side
+ * flags *resolved* (an absent flag means "whatever the catalogue says", and the model cannot
+ * see the catalogue here), its best 1RM, the series behind it and its recent sessions.
+ */
+function focusExercise(S, id, lang, limit, cfgIn) {
+  const cfg = cfgIn || (S.routines || []).flatMap(r => r.ex || []).find(e => e.id === id) || null;
+  const best = best1RM(S, id);
+  const series = e1rmSeries(S, id).slice(-limit).map(p => ({ d: p.d, y: p.y }));
+  // Body part and target group, resolved for the same reason the flags are: "what could
+  // replace this" is answered by matching them against the library slice, and a custom exercise
+  // has no catalogue row to read them from. Custom records carry their own `bp`.
+  const lib = LIB_BY_ID.get(id);
+  const custom = (S.customEx || []).find(c => c.id === id);
+  return {
+    id,
+    name: nameFor(S, id, lang),
+    ...(lib || custom ? { bp: lib?.bp || custom?.bp || null, ...(lib?.tg ? { tg: lib.tg } : {}) } : {}),
+    ...(cfg ? {
+      config: {
+        ...cleanEx(cfg, lang, S),
+        bodyweight: isBw(cfg, LIB_BY_ID.get(cfg.id)),
+        ...(isPerSide(cfg) ? { side: true } : {})
+      }
+    } : {}),
+    ...stallFor(S, id),
+    ...(best ? { best: { est: best.est, w: best.w, r: best.r, d: best.d } } : {}),
+    ...(series.length > 1 ? { e1rm: series } : {}),
+    // `sessions` is the count stallFor reports above; the summaries live under `history` so a
+    // count and a list cannot shadow each other.
+    history: exerciseHistory(S, id, limit)
+  };
+}
+
 /**
  * Build a job payload.
  *
@@ -342,9 +436,14 @@ export function build(S, opts = {}) {
   // library it is given, so a Spanish lifter gets Spanish exercise names rather than the
   // catalogue's English ones.
   const lang = S.lang || 'en';
+  // How much context a focused job gets. Instance mode spends the owner's account, so it runs
+  // lighter by default; profile mode (and the phone's own key) pays its own way and gets the
+  // fuller picture. It changes payload size only — the prompt is the same either way.
+  const depth = opts.depth === 'light' ? 'light' : 'full';
   const p = {
     coach_contract: CONTRACT,
-    task: opts.kind === 'review' ? 'review' : opts.kind === 'debrief' ? 'debrief' : 'create',
+    task: opts.kind === 'review' ? 'review' : opts.kind === 'debrief' ? 'debrief'
+      : opts.kind === 'ask' ? 'ask' : opts.kind === 'loads' ? 'loads' : 'create',
     meta: {
       profile: opts.handle,
       lang,
@@ -413,6 +512,55 @@ export function build(S, opts = {}) {
     if (opts.cohort) p.cohort = opts.cohort;
     // A review names mostly what is already trained; 60 candidates is plenty for a swap.
     p.library = librarySlice(S, profile?.equipment, { keep: trainedIds(S, workouts), max: 60, lang });
+  } else if (opts.kind === 'ask') {
+    // A question, with the smallest context that can answer it. A focused exercise sends its
+    // own numbers and no window; a general question gets a compact review window instead. No
+    // library: an answer names what it was given, it does not design anything.
+    p.question = String(opts.question || '').slice(0, 1000);
+    const focus = opts.exId ? focusExercise(S, opts.exId, lang, FOCUS_SESSIONS[depth]) : null;
+    if (focus) {
+      p.focus = focus;
+    } else {
+      const workouts = reviewWindow(S, null).slice(-(depth === 'light' ? 8 : 20));
+      p.window = {
+        from: workouts[0]?.d || null,
+        to: workouts[workouts.length - 1]?.d || null,
+        workouts: workouts.map(w => compactWorkout(S, w, lang))
+      };
+      p.aggregates = aggregates(S, workouts, lang);
+    }
+    // The vocabulary an answer names exercises from. Without it the model could only name what
+    // happens to be in `plan` — which is how "replace my lateral raise" came back with a calf
+    // raise and a Bulgarian split squat: those were the only exercise names it had. A focused
+    // question puts the focus's own body part first, so replacements are real candidates; a
+    // general question gets the balanced slice. An answer carries no changes, so this is advice
+    // material, not a proposal surface.
+    p.library = librarySlice(S, profile?.equipment, {
+      keep: trainedIds(S, S.workouts || []),
+      prefer: focus?.bp ? [focus.bp] : [],
+      max: depth === 'light' ? 30 : 50,
+      lang
+    });
+    p.bodyweight = recentBodyweight(S, depth === 'light' ? 4 : 8);
+  } else if (opts.kind === 'loads') {
+    // The next training day (or the next time a named routine comes round), as the app's own
+    // week reader resolves it, with each exercise's recent history. The model proposes working
+    // weights; the app decides later, on the user's confirmation, whether that session runs on
+    // them.
+    const target = opts.target || nextTrainingDay(S, opts.today || iso(new Date()), { routineIds: opts.routineIds });
+    if (target) {
+      p.target = {
+        iso: target.iso,
+        weekday: target.weekday,
+        routines: target.routines.map(r => ({
+          id: r.id, name: r.name || '', ...(r.emoji ? { emoji: r.emoji } : {}),
+          ex: (r.ex || []).map(e => focusExercise(S, e.id, lang, FOCUS_SESSIONS[depth], e))
+        }))
+      };
+    } else {
+      p.target = null;
+    }
+    p.bodyweight = recentBodyweight(S, depth === 'light' ? 4 : 8);
   } else {
     p.library = librarySlice(S, profile?.equipment, { keep: trainedIds(S, S.workouts || []), lang });
     // Creation for a returning user: what they have actually handled, so proposed baselines
@@ -438,7 +586,7 @@ export function build(S, opts = {}) {
     }
   }
   if (opts.kind !== 'debrief') {
-    const said = conversation(coach, [opts.note, opts.refine]);
+    const said = conversation(coach, [opts.note, opts.refine, opts.question]);
     if (said.length) p.conversation = said;
   }
   return p;

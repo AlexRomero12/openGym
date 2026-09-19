@@ -39,11 +39,13 @@ vi.mock('../lib/coach-api.js', () => ({
   refinePlan: vi.fn(() => Promise.resolve({})),
   requestReview: vi.fn(() => Promise.resolve({})),
   requestDebrief: vi.fn(() => Promise.resolve({})),
+  requestAsk: vi.fn(() => Promise.resolve({})),
+  requestLoads: vi.fn(() => Promise.resolve({})),
   cohortStats: vi.fn(() => Promise.resolve({ ok: false, enabled: true, sharing: false })),
   setCohortShare: vi.fn(() => Promise.resolve({ ok: true, sharing: true })),
   JOB_ERRORS: { internal: 'x' },
 }))
-vi.mock('../sheets.jsx', () => ({ startFlow: vi.fn(), confirmSheet: vi.fn() }))
+vi.mock('../sheets.jsx', () => ({ startFlow: vi.fn(), confirmSheet: vi.fn(), exercisePicker: vi.fn() }))
 vi.mock('../lib/api.js', () => ({
   api: vi.fn(() => Promise.resolve({})),
   IS_APPLE: false, IS_ANDROID: false, BIO: 'biometrics',
@@ -66,7 +68,7 @@ const everyDay = Object.fromEntries([0, 1, 2, 3, 4, 5, 6].map(d => [d, 'x1']))
 
 const state = () => ({
   unit: 'kg', lang: 'en', customEx: [], workouts: [], bodyweight: [], exWeights: {},
-  dayPlan: {}, routines: [], week: {},
+  dayPlan: {}, routines: [], week: {}, prefill: {},
   coach: {
     consent: { agreedAt: '2026-07-01T00:00:00Z', version: 1 },
     profile: { goal: 'muscle', experience: 'new', daysPerWeek: 3, sessionMin: 60, preferredDays: [1, 3, 5], equipment: [] },
@@ -195,6 +197,36 @@ describe('the Coach chat', () => {
     expect(mocks.S.coach.chat.at(-1).ref).toBe(mocks.S.coach.log.at(-1).id)
   })
 
+  it('answers a question with the app’s own 1RM, and files the answer on "Got it"', async () => {
+    const S = state()
+    S.workouts = [{ d: '2026-08-20', entries: [{ id: '0001', sets: [{ w: 100, r: 5, done: true }] }] }]
+    await mount({ id: 'a1', kind: 'ask', exId: '0001', question: '¿Cuánto levanto?', title: 'Respuesta', answer: 'Tu 1RM es **116.7 kg**.', notes: ['Una nota'] }, null, { S })
+    expect(container.textContent).toContain('116.7')
+    expect(container.querySelector('.pcard-ans b')).toBeTruthy()
+    await click(byText(/Got it/))
+    expect(mocks.S.coach.log.at(-1).kind).toBe('answer')
+    expect(mocks.S.coach.log.at(-1).answer).toContain('116.7')
+    expect(mocks.S.coach.chat.at(-1).kind).toBe('answer')
+    expect(mocks.S.coach.chat.at(-1).ref).toBe(mocks.S.coach.log.at(-1).id)
+  })
+
+  it('confirms a Coach load for the session it is for, and leaves the routine untouched', async () => {
+    const S = state()
+    S.routines = [{ id: 'r1', name: 'A', ex: [{ id: '0001', sets: 3, reps: 10, weight: 20 }] }]
+    await mount({
+      id: 'l1', kind: 'loads', target: { iso: '2026-09-19', weekday: 6 }, summary: 's',
+      changes: [{ id: 'w1', type: 'weight', target: { routineId: 'r1', exId: '0001' }, before: 20, after: 22.5, why: 'hit every target last time', routineName: 'A' }],
+      notes: []
+    }, null, { S })
+    expect(container.textContent).toContain('22.5')
+    await click(byText(/Load 1 weight/))
+    expect(mocks.S.prefill['2026-09-19'].ex['0001'].w).toBe(22.5)
+    expect(mocks.S.routines[0].ex[0].weight).toBe(20)
+    expect(mocks.S.coach.snapshots).toHaveLength(0)
+    expect(mocks.S.coach.log.at(-1).kind).toBe('loads')
+    expect(mocks.S.coach.chat.at(-1).kind).toBe('applied')
+  })
+
   it('offers the quick actions only when nothing is running', async () => {
     await mount(null)
     expect(byText(/Review my training/)).toBeTruthy()
@@ -208,5 +240,24 @@ describe('the Coach chat', () => {
     expect(byText(/^Compare$/)).toBeFalsy()
     await mount(null, null, { community: true })
     expect(byText(/^Compare$/)).toBeTruthy()
+  })
+
+  it('leaves a proposal for later without deciding it, and reopens it from the thread', async () => {
+    mocks.S = state()
+    await mount({ id: 'r1', kind: 'review', summary: 's', changes: [
+      { id: 'a', type: 'week', target: { weekday: 1 }, before: null, after: null, why: 'rest' }
+    ] })
+    await click(byText(/Leave for later/))
+    expect(mocks.S.coach.held).toEqual({ id: 'r1', at: expect.any(Number) })
+    expect(mocks.pending.id).toBe('r1', 'the proposal is still pending, not decided')
+    expect(mocks.S.coach.log).toHaveLength(0)
+    // The poll returns the same pending on the next visit; the card comes back collapsed.
+    await act(async () => { root.render(React.createElement(CoachChat)) })
+    expect(container.textContent).toContain('Kept for later')
+    expect(byText(/Apply 1 change/)).toBeFalsy()
+    await click(byText(/Review now/))
+    expect(mocks.S.coach.held).toBeNull()
+    await act(async () => { root.render(React.createElement(CoachChat)) })
+    expect(byText(/Apply 1 change/)).toBeTruthy()
   })
 })

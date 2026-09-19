@@ -88,8 +88,10 @@ length, equipment, limitations. From then on the Coach is a chat. The answers ar
 message; while a job runs a typing bubble shows the elapsed time; the proposal arrives as a
 card with a tab per routine and a reason under every change; free text below it asks for a
 refinement, a button applies it. Coming back later, asking for a review of what was logged
-since, or changing an answer all happen in the same conversation. Users cannot switch the
-Coach off themselves — only the admin can, from the card above.
+since, or changing an answer all happen in the same conversation. A proposal can also be left
+for later: **Leave for later** neither accepts nor declines it — it stays pending, collapses
+into a row in the thread ("kept for later", with its expiry date) and reopens with one tap.
+Users cannot switch the Coach off themselves — only the admin can, from the card above.
 
 A key, a model and the account binding described below belong to the provider they were
 entered for. Switching chips does not clear them: the Anthropic key is still there when you
@@ -171,6 +173,43 @@ picture for its exercises and four weeks of weigh-ins — and gets back a readin
 score out of ten, what went well, what to watch, and what to do next time, each item citing the
 session's own numbers. A debrief cannot carry a change; an answer that tries is refused by the
 validator rather than trimmed. The card is kept in the Coach's history like everything else.
+
+### Asking questions, and the next session's loads
+
+A review changes the plan and a debrief reads one session; two smaller tasks sit between them,
+both asked for explicitly because they are questions a progression engine cannot answer on its
+own.
+
+**Ask about an exercise** opens the exercise picker and asks the Coach for its estimated 1RM and
+how it is going. The job sends that exercise's own sheet — its plan config with the bodyweight
+and per-side flags resolved, its body part, its best 1RM computed by the app, the Epley series
+behind it, its recent sets and its stall picture — plus a bounded library slice led by that body
+part, so a question like "what could replace this" is answered from real catalogue exercises
+instead of whatever happens to be in the plan. **Ask a question** is the same task without a
+focus: a compact window and the balanced slice instead. The answer comes back as a card whose
+tiles and chart are computed on the device from `S`, never from the prose, so the model explains
+but never supplies a statistic.
+
+**Next session loads** estimates the working weight for every exercise in the next training day
+(or in one routine, if you pick it). The payload carries the day the app's own week reader
+resolves and, per exercise, its recent sessions and its best estimate. This is the one task where
+the common rules allow a `weight` proposal; a review still may not set day-to-day loads. The card
+shows each estimate next to what the progression engine would load, and confirming the ones you
+agree with stores them in `S.prefill[date]`. That map is an override for one session:
+`beginWorkout` reads it once, the routine and the engine are never edited, and finishing the
+session consumes the entry. A day that passes untrained is swept on load. Nothing is written back
+to the plan, which is also why discarding a loads proposal leaves no snapshot to revert.
+
+Both features are available in instance and profile mode. In instance mode the payload is the
+lighter one — four sessions per exercise, an eight-session window for a general question —
+because the owner's account pays and the daily caps apply; in profile mode, and on a phone
+running its own key, the fuller slice travels because the person pays for it. The screens are
+identical either way.
+
+Answers and load proposals are drawn with the app's own mini-format, not markdown: `**bold**`,
+`*italic*`, `##` for an uppercase section label, `- ` for lists — described to the model in
+`common.md` and parsed by `frontend/src/lib/rich-text.js` into React elements. A marker the model
+fails to close stays visible text, and nothing in an answer can become markup.
 
 ### Comparing with others on the instance
 
@@ -257,7 +296,7 @@ otherwise. Custom exercises keep the name their owner gave them. The five catego
 | `plan` | routines, exercises, sets/reps, schedule, progression settings |
 | `training` | logged sets, targets, effort ratings, durations, PRs in the review window |
 | `bodyweight` | weigh-ins in the window and your goal weight |
-| `profile` | the intake answers you gave the Coach, including any limitations |
+| `profile` | the intake answers you gave the Coach, including any limitations, and the question you typed when asking one |
 | `cohort` (optional) | only with comparison on and your own opt-in: anonymous medians from the other people sharing — never their data, and never yours to them beyond the same medians |
 | `prefs` | unit, language, effort scale |
 

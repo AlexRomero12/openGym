@@ -14,7 +14,7 @@ import { CONTRACT } from './payload.js';
 import { buildPrompt, buildPromptParts } from './prompt.js';
 import { SCHEMAS } from './schemas.js';
 import { extractJSON, contractOK } from './parse.js';
-import { validatePlan, validateReview, validateDebrief } from './validate.js';
+import { validatePlan, validateReview, validateDebrief, validateAsk, validateLoads } from './validate.js';
 
 /**
  * One attempt: prompt → provider → parse → validate.
@@ -63,11 +63,15 @@ export async function attemptOnce({ adapter, cfg, kind, payload, model, timeoutM
     ? validateReview(parsed.value, payload.plan, { customIds })
     : kind === 'debrief'
       ? validateDebrief(parsed.value)
-      : validatePlan(parsed.value, {
-      customIds,
-      workingWeights: payload.history?.workingWeights,
-      daysPerWeek: payload.coachProfile?.daysPerWeek
-    });
+      : kind === 'ask'
+        ? validateAsk(parsed.value)
+        : kind === 'loads'
+          ? validateLoads(parsed.value, payload.plan, { iso: payload.target?.iso, weekday: payload.target?.weekday })
+          : validatePlan(parsed.value, {
+            customIds,
+            workingWeights: payload.history?.workingWeights,
+            daysPerWeek: payload.coachProfile?.daysPerWeek
+          });
 
   if (!checked.ok) return { ok: false, repairable: !repair, errors: checked.errors, raw: r.text, errorClass: 'unusable' };
   if (checked.nochange) return { ok: true, nochange: true, reading: checked.reading };

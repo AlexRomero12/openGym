@@ -7,6 +7,7 @@ import { DEMO, DEMO_SEEDED } from '../lib/demo.js'
 import { guestAllowed } from '../lib/guest.js'
 import { MOBILE, initReminderSync, nativeLoad, nativeSave, onAppActive, syncReminder, writeAutoBackup } from '../lib/mobile.js'
 import { mergeStates, localExtras } from '../lib/sync-merge.js'
+import { sweepPrefill } from '../lib/prefill.js'
 import { loadRemote, chooseLocal, forgetRemote, connect } from '../lib/remote.js'
 import { loadCoachDevice, saveCoachDevice, coachDeviceSettings } from '../lib/coach-device.js'
 
@@ -25,6 +26,10 @@ export const DEF = {
   theme: 'dark', accent: 'lime', body: 'male', targetW: null,
   bodyweight: [], routines: [], week: {}, dayPlan: {},
   exWeights: {}, workouts: [], active: null, customEx: [], gifSize: 'full',
+  // Weights the Coach estimated and the lifter confirmed for one upcoming session, keyed by
+  // ISO date then exercise id (lib/prefill.js). Consumed when that session is started and
+  // cleared when it is finished; absent is every profile written before this existed.
+  prefill: {},
   // How the active workout is laid out — 'cards' (one exercise at a time with Prev/Next),
   // 'list' (every exercise stacked and scrollable) or 'compact' (that stack stripped to just
   // names and set rows — no media, tags, notes, last-time or progression line). Purely
@@ -83,11 +88,16 @@ export const DEF = {
 const clone = o => JSON.parse(JSON.stringify(o))
 
 function loadState() {
+  let st = null
   try {
     const raw = localStorage.getItem(KEY)
-    if (raw) return Object.assign(clone(DEF), JSON.parse(raw))
+    if (raw) st = Object.assign(clone(DEF), JSON.parse(raw))
   } catch (e) { /* ignore */ }
-  return clone(DEF)
+  if (!st) st = clone(DEF)
+  // A confirmed load is only meaningful on its own date; anything before today is noise that
+  // would otherwise ride in the state blob forever.
+  sweepPrefill(st)
+  return st
 }
 
 const hasData = st => !!((st.workouts || []).length || (st.routines || []).length || (st.bodyweight || []).length)
@@ -99,7 +109,15 @@ export function restoredStateFor(local, remote, dirty = false) {
   if (!remote || (hasData(local) && (dirty || (remote._ts || 0) < (local._ts || 0)))) return null
   const next = Object.assign(clone(DEF), remote)
   if (local.active) next.active = local.active
+  sweepPrefill(next)
   return next
+}
+
+/** A state built from the server's document, with a stale prefill impossible to adopt. */
+function serverState(state, active) {
+  const st = Object.assign(clone(DEF), state, { active: active || null })
+  sweepPrefill(st)
+  return st
 }
 
 export const useStore = create((set, get) => {
@@ -205,6 +223,7 @@ export const useStore = create((set, get) => {
   const mergeInto = (local, remote, rev) => {
     const merged = Object.assign(clone(DEF), mergeStates(local, remote))
     merged.active = local.active || null
+    sweepPrefill(merged)
     persist(merged, false)
     writeSync(rev, readSync()?.ts || 0)
   }
@@ -436,7 +455,7 @@ export const useStore = create((set, get) => {
           const localChanged = dirty || (S._ts || 0) > (sync.ts || 0)
           if (!serverMoved) { if (localChanged) await get().pushState(); return }
           if (!state) { writeSync(rev, 0); if (hasData(S)) await get().pushState(); return }
-          if (!localChanged) { adopt(Object.assign(clone(DEF), state, { active: S.active || null }), rev); return }
+          if (!localChanged) { adopt(serverState(state, S.active), rev); return }
           mergeInto(S, state, rev)
           pushPending = false
           await get().pushState()
@@ -466,10 +485,11 @@ export const useStore = create((set, get) => {
       }
       const extras = localExtras(S, state)
       const keep = (extras.workouts || extras.bodyweight || extras.customEx) && typeof ask === 'function' ? await ask(extras) : false
-      const serverCopy = Object.assign(clone(DEF), state, { active: S.active || null })
+      const serverCopy = serverState(state, S.active)
       if (keep) {
         const merged = Object.assign(clone(DEF), mergeStates(state, S, { prefer: 'a' }))
         merged.active = S.active || null
+        sweepPrefill(merged)
         persist(merged, false)
         if (rev != null) writeSync(rev, 0)
         else localStorage.removeItem(SYNC_KEY)

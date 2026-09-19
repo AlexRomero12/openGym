@@ -38,7 +38,7 @@ const slim = (e, lang) => ({
   ...(e.custom ? { custom: true } : {})
 });
 
-export function librarySlice(S, equipment, { keep = [], max = MAX_LIBRARY, lang } = {}) {
+export function librarySlice(S, equipment, { keep = [], max = MAX_LIBRARY, lang, prefer = [] } = {}) {
   const wanted = (equipment || []).map(x => String(x).toLowerCase());
   const customs = (S.customEx || []).map(c => ({ id: c.id, n: c.n, bp: c.bp, tg: null, eq: 'custom', custom: true }));
   // No equipment stated (or "everything") ⇒ the whole catalogue. Filtering to nothing would
@@ -53,6 +53,11 @@ export function librarySlice(S, equipment, { keep = [], max = MAX_LIBRARY, lang 
   const add = e => { if (!taken.has(e.id)) { taken.add(e.id); out.push(e); } };
   // What the user already trains comes first, filter or no filter.
   for (const id of pinned) add(LIB_BY_ID.get(id));
+  // Then what the question is about: a "what could replace this" ask needs candidates from the
+  // same body part, and the round-robin below would otherwise spend the budget elsewhere first.
+  // Only fills while there is room, so a small `max` is still all candidates and nothing else.
+  const wantedBp = new Set((prefer || []).map(x => String(x).toLowerCase()));
+  if (wantedBp.size) for (const e of base) { if (out.length >= max) break; if (wantedBp.has(e.bp)) add(e); }
   if (base.length + out.length <= max) {
     base.forEach(add);
   } else {

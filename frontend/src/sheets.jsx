@@ -38,6 +38,7 @@ import { useSheetKeyboard, useRevealActiveChip, tappable } from './lib/use-sheet
 import { isFav, toggleFav, sortFavouritesFirst } from './lib/favourites.js'
 import { buildSessionEntries } from './lib/session-start.js'
 import { buildCombinedEntries, deriveSessionName } from './lib/session-merge.js'
+import { prefillFor, clearPrefill } from './lib/prefill.js'
 import { workoutsOn, backfillStart, backfillEnd, completeBackfill } from './lib/backfill.js'
 
 const S = () => useStore.getState().S
@@ -1791,7 +1792,10 @@ export function startFlow(routineIds) {
 }
 export function beginWorkout(routineIds, bw) {
   const st = S()
-  const { entries, routineIds: rids, routines } = buildCombinedEntries(st, routineIds)
+  // Weights the lifter confirmed from a Coach load estimate for today, if any. They apply to
+  // this build only — the engine and the plan are untouched, and the entry is consumed at the
+  // finish (doFinishWorkout).
+  const { entries, routineIds: rids, routines } = buildCombinedEntries(st, routineIds, { prefill: prefillFor(st, todayISO()) })
   update(s => {
     s.active = {
       id: uid(), d: todayISO(), start: Date.now(),
@@ -1898,7 +1902,9 @@ function AddRoutineToSession({ close }) {
   if (!active) return null
   const inSession = new Set([].concat(active.routineIds || []))
   const add = r => {
-    const entries = buildSessionEntries(st, r).map(e => ({ ...e, rid: r.id }))
+    // A routine added mid-session is still that session's date, so a Coach load confirmed for
+    // the day belongs on its entries too.
+    const entries = buildSessionEntries(st, r, { prefill: prefillFor(st, active.d) }).map(e => ({ ...e, rid: r.id }))
     update(s => {
       if (!s.active) return
       s.active.entries.push(...entries)
@@ -2175,6 +2181,9 @@ function doFinishWorkout() {
       s.workouts.push(w)
     }
     s.active = null
+    // The Coach's confirmed loads for this date have done their job — the session they were
+    // for is now part of the history the engine reads.
+    clearPrefill(s, w.d)
   })
   useStore.getState().autoBackupNow()
   useUI.getState().stopRest()

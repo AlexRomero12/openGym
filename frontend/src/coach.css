@@ -104,6 +104,22 @@
 .msg.sys{align-self:center;max-width:100%;align-items:center}
 .bub ul{margin:6px 0 0;padding-left:18px}
 .bub li{margin:2px 0}
+/* The Coach's mini-format (lib/rich-text.js). A `.rt` with no markers renders exactly like the
+   plain string bubbles always did: each paragraph is pre-wrapped, so the model's own line
+   breaks survive. `##` lines are the app's section label, the same uppercase treatment the
+   rest of the UI gives a small heading. */
+.rt p{margin:0;white-space:pre-wrap}
+.rt p+p{margin-top:8px}
+.rt ul{margin:6px 0 0;padding-left:18px}
+.rt li{margin:2px 0}
+.rt b{font-weight:700}
+.rt i{font-style:italic}
+.rt-h{
+  font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--label-2);
+  margin:0
+}
+.rt-h+p,.rt-h+ul{margin-top:6px}
+.rt-h:not(:first-child){margin-top:10px}
 .msg-t{font-size:11px;color:var(--label-3);margin:4px 8px 0}
 .typing{display:flex;align-items:center;gap:5px;padding:14px 16px;min-width:64px}
 .typing i{width:8px;height:8px;border-radius:99px;background:var(--label-2);animation:typing 1.2s infinite ease-in-out}
@@ -156,6 +172,14 @@
 .pcard-chg-v{display:flex;align-items:center;gap:6px;margin:4px 0;font-size:13px}
 .pcard-chg-v .tag{font-size:12px}
 .pcard-chg-w{font-size:13px;color:var(--label-2);line-height:1.42}
+/* The line under a load row that says what the app itself would have loaded — context for the
+   confirmation, not part of the proposal. */
+.pcard-chg-hint{font-size:12.5px;color:var(--label-3);line-height:1.4;margin-top:2px}
+/* The answer card's prose: the same treatment as a summary, with a little more room. */
+.pcard-ans{padding:12px 18px 4px;font-size:15.5px;color:var(--label);line-height:1.5}
+.pcard-ans .rt-h{margin-top:2px}
+.chat-ask{width:100%;margin-top:8px;background:var(--surface);border:1px solid var(--sep-op);border-radius:var(--r-m);color:var(--label);font:inherit;font-size:15px;padding:10px 12px;resize:vertical}
+.ask-actions{display:flex;gap:8px;align-items:center}
 .pcard-chg-stale{font-size:12px;color:var(--yellow);margin-top:4px}
 .pcard-notes{padding:10px 18px 4px;border-top:var(--hair) solid var(--sep)}
 .pcard-notes div{font-size:13px;color:var(--label-2);line-height:1.45;padding:4px 0}
@@ -229,6 +253,8 @@
 .ins-cmp{font-size:12.5px;color:var(--label-2);line-height:1.5;display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;padding:0 2px}
 .pcard-notes div{display:flex;gap:8px;align-items:flex-start}
 .pcard-notes .icn{color:var(--yellow);flex:none;font-size:15px;margin-top:1px}
+/* The note's text is drawn by RichText, whose wrapper would otherwise inherit the flex row. */
+.pcard-notes .rt{display:block;flex:1;min-width:0;padding:0}
 
 /* ---------- a workout debrief ---------- */
 .deb-score{display:flex;align-items:center;gap:14px;padding:6px 18px 10px}

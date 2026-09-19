@@ -14,6 +14,8 @@
  *   - favEx: ordered set union, the newer copy first
  *   - exWeights: union by exercise, the larger `w` (the app itself only ever raises it — a PR
  *     logged on the other device must not be forgotten); exNotes, barWeights: key union
+ *   - prefill: per date, the copy written later (`at`) wins whole — a date is written in one
+ *     go, so there is nothing inside it to union
  *   - `_ts`: the later of the two; `_rev` dropped (the server sets it); `active` left to the caller
  *
  * Known limit: with no record of what each side deleted, an entry removed on one device inside
@@ -66,6 +68,22 @@ function mergeExWeights(n = {}, o = {}) {
   return out
 }
 
+/**
+ * Per date, the copy written later (`at`) wins whole.
+ *
+ * A prefill is written in one go for one date, so a date has no two sides to union the way a
+ * workout list does — the risk is only adopting an older copy of the same date, and `at` is
+ * exactly the tie-break for that.
+ */
+function mergePrefill(n = {}, o = {}) {
+  const out = clone(n || {})
+  for (const [iso, v] of Object.entries(o || {})) {
+    const cur = out[iso]
+    if (!cur || (v?.at || 0) > (cur.at || 0)) out[iso] = clone(v)
+  }
+  return out
+}
+
 // `prefer` names the side whose settings, plan and per-exercise config win regardless of `_ts`:
 // on sign-in the server's profile is the truth and the device only contributes the entries it
 // logged while signed out. Without it the newer copy decides, as for a conflict between devices.
@@ -82,6 +100,7 @@ export function mergeStates(a, b, { prefer } = {}) {
   out.bodyweight = mergeBodyweight(n.bodyweight, o.bodyweight).map(clone)
   if (list(n.favEx).length || list(o.favEx).length) out.favEx = [...new Set([...list(n.favEx), ...list(o.favEx)])]
   out.exWeights = clone(mergeExWeights(n.exWeights, o.exWeights))
+  out.prefill = mergePrefill(n.prefill, o.prefill)
   for (const f of ['exNotes', 'barWeights']) {
     if (n[f] || o[f]) out[f] = clone({ ...(o[f] || {}), ...(n[f] || {}) })
   }

@@ -23,13 +23,18 @@ import { DEMO } from '../lib/demo.js'
 import { MOBILE } from '../lib/mobile.js'
 import {
   coachAvailable, hasConsent, emptyCoach, appendChat, recordTiming, estimateMs, profileLines,
-  markStale, applicable, applyChangeSet, applyCreatedPlan, recordDismissal, recordDebrief, logEntry,
-  changeTitle, changeValues, exName, canRevert, revertLast
+  markStale, applicable, applyChangeSet, applyCreatedPlan, applyLoads, recordDismissal, recordDebrief,
+  recordAnswer, logEntry, changeTitle, changeValues, exName, canRevert, revertLast,
+  holdProposal, releaseProposal, heldId
 } from '../lib/coach.js'
 import { insightsFor, sessionInsights } from '../lib/coach-insights.js'
-import { useCoachStatus, requestReview, requestDebrief, requestPlan, refinePlan, resolvePending, cohortStats, setCohortShare, jobErrorText, coachAccount } from '../lib/coach-api.js'
-import { confirmSheet } from '../sheets.jsx'
+import { best1RM, e1rmSeries } from '../lib/onerm.js'
+import { nextPrescription } from '../lib/progression.js'
+import { useCoachStatus, requestReview, requestDebrief, requestPlan, refinePlan, requestAsk, requestLoads, resolvePending, cohortStats, setCohortShare, jobErrorText, coachAccount } from '../lib/coach-api.js'
+import { confirmSheet, exercisePicker } from '../sheets.jsx'
 import Icon from '../components/Icon.jsx'
+import RichText from '../components/RichText.jsx'
+import AskSheet from '../components/AskSheet.jsx'
 import LineChart from '../components/LineChart.jsx'
 import { Button, Check, Switch, Section, Row, SelectRow } from '../components/ui.jsx'
 import '../coach.css'
@@ -143,6 +148,29 @@ export default function CoachChat() {
   const askImprove = r => ask(
     () => requestReview(t('Focus only on my routine “{0}”. Improve it: exercise choice, order, sets and reps, rep ranges, progression. Leave the other routines alone.', r.name)),
     t('Improve my routine “{0}”.', r.name))
+  // A focused question about one exercise: pick it, then land in the ask sheet with it already
+  // selected and the question written out — the lifter sees exactly what will be sent before
+  // pressing Ask. The picker is closed here rather than left stacked above, because `exercisePicker`
+  // stays open for the screens that add several exercises in a row; this flow picks one.
+  const askExercise = () => {
+    let h
+    h = exercisePicker(ex => {
+      h?.close?.()
+      openSheet(close => <AskSheet close={close} ask={ask} initialEx={ex} />)
+    })
+  }
+  // A free-form question, optionally focused on an exercise. It is its own sheet because a
+  // typed message in the composer must keep meaning "change my plan" (the existing review path).
+  const askQuestion = () => openSheet(close => <AskSheet close={close} ask={ask} />)
+  const askLoads = () => ask(() => requestLoads(), t('What should I load in my next session?'))
+  const pickRoutineLoads = () => openSheet(close => <div className="chat-menu">
+    <h3>{t('Weights for which routine?')}</h3>
+    <div className="sect-b">
+      {(S.routines || []).map(r => <Row key={r.id} icon="dumbbell" iconTint="var(--acc)" title={`${r.emoji || ''} ${r.name}`.trim()} subtitle={t('{0} exercises', (r.ex || []).length)} accessory="chevron" onClick={() => { close(); ask(() => requestLoads([r.id]), t('What should I load for “{0}”?', r.name)) }} />)}
+      {!(S.routines || []).length && <div className="chat-empty">{t('You have no routines yet — ask the Coach for a plan first.')}</div>}
+    </div>
+    <div style={{ height: 10 }} />
+  </div>)
 
   const pickRoutine = () => openSheet(close => <div className="chat-menu">
     <h3>{t('Improve which routine?')}</h3>
@@ -163,6 +191,10 @@ export default function CoachChat() {
       {idle && <Row icon="sparkles" iconTint="var(--acc)" title={t('Ask for a review')} subtitle={t('What would the Coach change after your last sessions?')} accessory="chevron" onClick={() => { close(); askReview() }} />}
       {idle && !!lastWorkout && <Row icon="checkCircle" iconTint="var(--green)" title={t('Review my last workout')} subtitle={t('What went well, what to watch, what to do next time')} accessory="chevron" onClick={() => { close(); askDebrief() }} />}
       {idle && !!(S.routines || []).length && <Row icon="wrench" iconTint="var(--orange)" title={t('Improve a routine')} subtitle={t('Pick one; the Coach works on just that')} accessory="chevron" onClick={() => { close(); pickRoutine() }} />}
+      {idle && !!(S.routines || []).length && <Row icon="dumbbell" iconTint="var(--green)" title={t('Weights for my next session')} subtitle={t('An estimate per exercise, from what you have lifted')} accessory="chevron" onClick={() => { close(); askLoads() }} />}
+      {idle && !!(S.routines || []).length && <Row icon="target" iconTint="var(--blue)" title={t('Weights for one routine')} subtitle={t('Pick a routine; the Coach estimates its next session')} accessory="chevron" onClick={() => { close(); pickRoutineLoads() }} />}
+      {idle && <Row icon="magnifier" iconTint="var(--teal)" title={t('Ask about an exercise')} subtitle={t('Its estimated 1RM and how it is going')} accessory="chevron" onClick={() => { close(); askExercise() }} />}
+      {idle && <Row icon="info" iconTint="var(--indigo)" title={t('Ask a question')} subtitle={t('Anything about your training, answered from your data')} accessory="chevron" onClick={() => { close(); askQuestion() }} />}
       {community && <Row icon="person" iconTint="var(--teal)" title={t('Compare with others here')} subtitle={t('Anonymous medians from this instance')} accessory="chevron" onClick={() => { close(); showCohort() }} />}
       {ownAccount && acct?.connected && <Row icon="key" iconTint="var(--acc)" title={t('My AI account')}
         subtitle={acct.providerLabel ? `${acct.providerLabel}${acct.model ? ' · ' + acct.model : ''}` : null} accessory="chevron"
@@ -187,7 +219,9 @@ export default function CoachChat() {
     }
   })
 
-  const status = job ? t('thinking…') : pending ? t('has a suggestion for you') : t('here when you need it')
+  const status = job ? t('thinking…')
+    : pending ? (heldId(S) === pending.id ? t('has a suggestion waiting') : t('has a suggestion for you'))
+      : t('here when you need it')
   const placeholder = pending?.kind === 'create'
     ? t('What should change?')
     : job ? t('Coach is thinking…') : t('Message the Coach…')
@@ -210,20 +244,32 @@ export default function CoachChat() {
 
       {job && <Typing S={S} kind={job.kind} coachLocal={coachLocal} config={config} />}
 
-      {pending && !job && (pending.kind === 'create'
-        ? <PlanCard p={pending} S={S} update={update} toast={toast} nav={nav} refresh={refresh} />
-        : pending.kind === 'debrief'
-          ? <DebriefCard p={pending} S={S} update={update} toast={toast} refresh={refresh} />
-          : <ReviewCard p={pending} S={S} update={update} toast={toast} refresh={refresh} />)}
+      {pending && !job && (heldId(S) === pending.id
+        ? <HeldCard p={pending} update={update} />
+        : pending.kind === 'create'
+          ? <PlanCard p={pending} S={S} update={update} toast={toast} nav={nav} refresh={refresh} />
+          : pending.kind === 'debrief'
+            ? <DebriefCard p={pending} S={S} update={update} toast={toast} refresh={refresh} />
+            : pending.kind === 'ask'
+              ? <AnswerCard p={pending} S={S} update={update} toast={toast} refresh={refresh} />
+              : pending.kind === 'loads'
+                ? <LoadsCard p={pending} S={S} update={update} toast={toast} refresh={refresh} />
+                : <ReviewCard p={pending} S={S} update={update} toast={toast} refresh={refresh} />)}
 
       <div ref={endRef} />
     </div>
 
     <div className="composer">
-      {idle && !busy && <div className="chips-row">
+      {/* `chips` as well as `chips-row`: that is what gives the strip its swipe behaviour on a
+          phone and the click-drag on a desktop pointer (lib/hchips.js), the same way every
+          other horizontal strip in the app does it. */}
+      {idle && !busy && <div className="chips chips-row">
         <button className="qchip" onClick={askReview}><Icon name="sparkles" />{t('Review my training')}</button>
         {!!lastWorkout && <button className="qchip" onClick={askDebrief}><Icon name="checkCircle" />{t('Last workout')}</button>}
         {!!(S.routines || []).length && <button className="qchip" onClick={pickRoutine}><Icon name="wrench" />{t('Improve a routine')}</button>}
+        {!!(S.routines || []).length && <button className="qchip" onClick={askLoads}><Icon name="dumbbell" />{t('Next session loads')}</button>}
+        <button className="qchip" onClick={askExercise}><Icon name="magnifier" />{t('Ask about an exercise')}</button>
+        <button className="qchip" onClick={askQuestion}><Icon name="info" />{t('Ask a question')}</button>
         {community && <button className="qchip" onClick={showCohort}><Icon name="person" />{t('Compare')}</button>}
       </div>}
       <div className="composer-in">
@@ -255,16 +301,18 @@ function Message({ m, S, profile, openSheet }) {
       <ul>{lines.map((l, i) => <li key={i}>{l}</li>)}</ul>
     </Bubble>
   }
-  if (m.kind === 'applied' || m.kind === 'dismissed' || m.kind === 'debrief') {
+  if (m.kind === 'applied' || m.kind === 'dismissed' || m.kind === 'debrief' || m.kind === 'answer' || m.kind === 'loads') {
     const entry = m.ref ? logEntry(S, m.ref) : null
     return <div className="msg coach" style={entry ? { maxWidth: '100%', width: '100%' } : undefined}>
-      {!!m.text && <div className="bub">{m.text}</div>}
+      {!!m.text && <div className="bub"><RichText text={m.text} /></div>}
       {entry && <Recap entry={entry} S={S} openSheet={openSheet} />}
       {m.at && <div className="msg-t">{stamp(m.at)}</div>}
     </div>
   }
   if (m.kind === 'reverted' || m.kind === 'nochange' || m.kind === 'error' || m.kind === 'text') {
-    return <Bubble role={m.role} kind={m.kind} at={m.at}>{m.text}</Bubble>
+    // The Coach's own words carry the mini-format; the user's are shown exactly as typed.
+    const body = m.role === 'coach' && typeof m.text === 'string' ? <RichText text={m.text} /> : m.text
+    return <Bubble role={m.role} kind={m.kind} at={m.at}>{body}</Bubble>
   }
   return null
 }
@@ -290,7 +338,11 @@ function Typing({ S, kind, coachLocal, config }) {
     // local model rather than something wrong; the next line already warns it takes longer.
     eta = local ? '' : t('This usually takes a minute or two.')
   }
-  const doing = kind === 'create' ? t('Building your plan…') : kind === 'debrief' ? t('Looking at that session…') : t('Reading your training…')
+  const doing = kind === 'create' ? t('Building your plan…')
+    : kind === 'debrief' ? t('Looking at that session…')
+      : kind === 'ask' ? t('Reading your numbers…')
+        : kind === 'loads' ? t('Working out the loads…')
+          : t('Reading your training…')
   return <div className="msg coach">
     <div className="bub typing"><i /><i /><i /></div>
     <div className="typing-eta">
@@ -334,14 +386,15 @@ function PlanCard({ p, S, update, toast, nav, refresh }) {
       refresh()
     }
   })
+  const later = () => { update(s => holdProposal(s, p.id)); toast(t('Kept for later')) }
 
   return <div className="msg coach" style={{ maxWidth: '100%', width: '100%' }}>
     <div className="pcard">
       <div className="pcard-hd">
         <div className="pcard-eyebrow">{p.iteration > 1 ? t('Revision {0}', p.iteration) : t('Your plan')}</div>
         <h2 className="pcard-h">{b.name || t('Coach plan')}</h2>
-        {!!b.summary && <p className="pcard-sum">{b.summary}</p>}
-        {!!b.basedOn && <p className="pcard-sum" style={{ fontSize: 13 }}>{b.basedOn}</p>}
+        {!!b.summary && <RichText className="pcard-sum" text={b.summary} />}
+        {!!b.basedOn && <RichText className="pcard-sum" style={{ fontSize: 13 }} text={b.basedOn} />}
       </div>
 
       <WeekStrip days={weekDays} />
@@ -359,6 +412,7 @@ function PlanCard({ p, S, update, toast, nav, refresh }) {
       <div className="pcard-note">{t('The Coach is not a doctor or a physiotherapist. If something hurts, ask a professional.')}</div>
       <div className="pcard-ft">
         <Button variant="primary" icon="download" onClick={accept}>{t('Import this plan')}</Button>
+        <Button icon="clock" onClick={later}>{t('Leave for later')}</Button>
         <Button onClick={discard}>{t('Discard')}</Button>
       </div>
     </div>
@@ -372,10 +426,10 @@ const WeekStrip = ({ days }) => <div className="pcard-week">
 
 const RoutineBlock = ({ r, unit }) => <div className="pcard-rt">
   <div className="pcard-rt-h"><b>{r.emoji} {r.name}</b><span>{t('{0} exercises', r.ex.length)}</span></div>
-  {!!r.why && <div className="pcard-why">{r.why}</div>}
+  {!!r.why && <RichText className="pcard-why" text={r.why} />}
   {r.ex.map((e, i) => <div key={i} className="pcard-ex">
     <div className="pcard-ex-r"><span className="pcard-ex-n">{exName(e.id)}</span><span className="pcard-ex-l">{exLine(e, unit)}</span></div>
-    {!!e.why && <div className="pcard-ex-w">{e.why}</div>}
+    {!!e.why && <RichText className="pcard-ex-w" text={e.why} />}
   </div>)}
 </div>
 
@@ -409,13 +463,14 @@ function ReviewCard({ p, S, update, toast, refresh }) {
       refresh()
     }
   })
+  const later = () => { update(s => holdProposal(s, p.id)); toast(t('Kept for later')) }
 
   return <div className="msg coach" style={{ maxWidth: '100%', width: '100%' }}>
     <div className="pcard">
       <div className="pcard-hd">
         <div className="pcard-eyebrow">{t('Suggestions')}</div>
         <h2 className="pcard-h">{t(marked.changes.length === 1 ? '{0} suggestion' : '{0} suggestions', marked.changes.length)}</h2>
-        {!!marked.summary && <p className="pcard-sum">{marked.summary}</p>}
+        {!!marked.summary && <RichText className="pcard-sum" text={marked.summary} />}
         {!!marked.evidence?.sessions && <p className="pcard-sum" style={{ fontSize: 13 }}>
           {t('Based on your last {0} sessions', marked.evidence.sessions)}{marked.evidence.from ? ` · ${fmtDate(marked.evidence.from)} – ${fmtDate(marked.evidence.to)}` : ''}
         </p>}
@@ -440,19 +495,21 @@ function ReviewCard({ p, S, update, toast, refresh }) {
         <Button variant="primary" icon="check" onClick={apply}>
           {accepted.size ? t(accepted.size === 1 ? 'Apply {0} change' : 'Apply {0} changes', accepted.size) : t('Apply nothing')}
         </Button>
+        <Button icon="clock" onClick={later}>{t('Leave for later')}</Button>
         <Button onClick={discard}>{t('Dismiss all')}</Button>
       </div>
     </div>
   </div>
 }
 
-function ChangeRow({ c, S, stale, badge, children }) {
+function ChangeRow({ c, S, stale, badge, hint, children }) {
   const vals = changeValues(c, S)
   return <div className={'pcard-chg' + (stale ? ' stale' : '') + (c.status === 'rejected' ? ' declined' : '')}>
     <div className="grow">
       <div className="pcard-chg-t">{changeTitle(c, S)}{c.routineName ? <span className="dim" style={{ fontWeight: 400 }}> · {c.routineName}</span> : null}</div>
       {vals && <div className="pcard-chg-v"><span className="tag">{vals.before}</span><Icon name="chevronRight" style={{ fontSize: 12, color: 'var(--label-3)' }} /><span className="tag acc">{vals.after}</span></div>}
-      <div className="pcard-chg-w">{c.why}</div>
+      <RichText className="pcard-chg-w" text={c.why} />
+      {hint && <div className="pcard-chg-hint">{hint}</div>}
       {stale && <div className="pcard-chg-stale">{t('Doesn’t match your plan any more — can’t be applied.')}</div>}
     </div>
     {badge}
@@ -461,7 +518,7 @@ function ChangeRow({ c, S, stale, badge, children }) {
 }
 
 const Notes = ({ notes }) => !!notes?.length && <div className="pcard-notes">
-  {notes.map((n, i) => <div key={i}><Icon name="lightbulb" />{n}</div>)}
+  {notes.map((n, i) => <div key={i}><Icon name="lightbulb" /><RichText text={n} /></div>)}
 </div>
 
 /* ---------------------------------- insights ---------------------------------- */
@@ -559,7 +616,7 @@ function DebriefBody({ p, S }) {
 const Delta = ({ v, unit, label }) => <span className={'ins-delta' + (v > 0 ? ' up' : v < 0 ? ' down' : '')}>{v > 0 ? '+' : ''}{fmtNum(v)} {unit} {label}</span>
 const DebriefList = ({ icon, tint, title, items }) => !!items?.length && <div className="deb-list">
   <div className="deb-list-h" style={{ color: tint }}><Icon name={icon} />{title}</div>
-  {items.map((x, i) => <div key={i} className="deb-item">{x}</div>)}
+  {items.map((x, i) => <RichText key={i} className="deb-item" text={x} />)}
 </div>
 const scoreWord = s => s >= 9 ? t('Excellent session') : s >= 7 ? t('Good session') : s >= 5 ? t('Solid session') : t('Tough session')
 
@@ -575,7 +632,7 @@ function DebriefCard({ p, S, update, toast, refresh }) {
       <div className="pcard-hd">
         <div className="pcard-eyebrow">{t('Workout debrief')}</div>
         <h2 className="pcard-h">{p.workout?.name || t('Your last workout')}</h2>
-        {!!p.summary && <p className="pcard-sum">{p.summary}</p>}
+        {!!p.summary && <RichText className="pcard-sum" text={p.summary} />}
       </div>
       <DebriefBody p={p} S={S} />
       <div className="pcard-ft">
@@ -583,6 +640,169 @@ function DebriefCard({ p, S, update, toast, refresh }) {
       </div>
     </div>
     <div className="msg-t">{t('Want changes to the plan from this? Ask for a review below.')}</div>
+  </div>
+}
+
+/* ---------------------------------- an answer ---------------------------------- */
+
+/**
+ * A question answered: the app's own numbers first, the Coach's prose second.
+ *
+ * The tiles and the chart are computed here, from `S` — never from the answer text. That is the
+ * same posture the review cards take with their insights, and it means an answer kept in the
+ * thread months later still draws the numbers it was actually given, while the model's words
+ * stay what they are: an explanation, not a statistic.
+ */
+function AnswerCard({ p, S, update, toast, refresh }) {
+  const done = () => {
+    update(s => { const ref = recordAnswer(s, p); appendChat(s, { role: 'coach', kind: 'answer', ref, text: '' }) })
+    resolvePending({ accepted: ['answer'] }).catch(() => {})
+    refresh()
+  }
+  const best = p.exId ? best1RM(S, p.exId) : null
+  const series = p.exId ? e1rmSeries(S, p.exId).slice(-12) : []
+  return <div className="msg coach" style={{ maxWidth: '100%', width: '100%' }}>
+    <div className="pcard">
+      <div className="pcard-hd">
+        <div className="pcard-eyebrow">{t('Answer')}</div>
+        <h2 className="pcard-h">{p.title || (p.exId ? exName(p.exId) : t('Your question'))}</h2>
+        {!!p.question && <p className="pcard-sum" style={{ fontSize: 13 }}>{p.question}</p>}
+      </div>
+
+      {best && <div className="ins" style={{ paddingTop: 0 }}>
+        <div className="ins-tiles">
+          <Tile v={fmtNum(best.est)} l={t('Estimated 1RM ({0})', S.unit)} />
+          <Tile v={`${fmtNum(best.w)}×${best.r}`} l={t('Best set')} />
+          <Tile v={fmtDate(best.d)} l={t('From')} />
+        </div>
+        {series.length > 1 && <div className="ins-block">
+          <div className="ins-h"><span>{t('Estimated 1RM per workout')}</span><span className="dim">{S.unit}</span></div>
+          <div className="chart"><LineChart points={series} h={110} unit={S.unit} axes /></div>
+        </div>}
+      </div>}
+
+      <div className="pcard-ans"><RichText text={p.answer} /></div>
+      <Notes notes={p.notes} />
+
+      <div className="pcard-ft">
+        <Button variant="primary" icon="check" onClick={done}>{t('Got it')}</Button>
+      </div>
+    </div>
+    <div className="msg-t">{t('Kept in your Coach history. Ask another question whenever you like.')}</div>
+  </div>
+}
+
+/* ---------------------------------- the next session's loads ---------------------------------- */
+
+/**
+ * The Coach's estimate for one upcoming session, confirmed by the lifter.
+ *
+ * Each row shows what the app itself would load (computed here with the progression engine) so
+ * the two numbers sit side by side and the choice is informed. Confirming writes the weights
+ * into `S.prefill[date]` — a one-session override — and nothing else: the routine and the
+ * engine keep owning every session after this one.
+ */
+function LoadsCard({ p, S, update, toast, refresh }) {
+  const marked = useMemo(() => markStale(p, S), [p, S])
+  const usable = applicable(marked)
+  const [accepted, setAccepted] = useState(() => new Set(usable.map(c => c.id)))
+  const toggle = id => setAccepted(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const activeToday = !!S.active && !!p.target?.iso && S.active.d === p.target.iso
+
+  const engineFor = c => {
+    const r = (S.routines || []).find(x => x.id === c.target?.routineId)
+    const cfg = (r?.ex || []).find(e => e.id === c.target?.exId)
+    if (!r || !cfg) return null
+    const plan = nextPrescription(S, cfg, r)
+    if (plan.kind === 'off' || plan.kind === 'first') {
+      return cfg.weight > 0
+        ? t('The app would start at {0}.', fmtNum(cfg.weight) + ' ' + S.unit)
+        : t('The app has no working weight for this one yet.')
+    }
+    return plan.weight != null ? t('The app would load {0}.', fmtNum(plan.weight) + ' ' + S.unit) : null
+  }
+
+  const apply = () => {
+    const ids = [...accepted].filter(id => usable.some(c => c.id === id))
+    if (!ids.length) { discard(); return }
+    try {
+      update(s => {
+        const res = applyLoads(s, marked, ids)
+        appendChat(s, { role: 'coach', kind: 'applied', ref: res.logId, text: t('Loaded — those weights are ready for that session. The plan and your progression are untouched.') })
+      })
+      resolvePending({ accepted: ids, rejected: marked.changes.filter(c => !ids.includes(c.id)).map(c => c.id) }).catch(() => {})
+      toast(t(ids.length === 1 ? '1 weight ready for that session' : '{0} weights ready for that session', ids.length))
+      refresh()
+    } catch (e) { toast(e.message || t('Could not load those weights')) }
+  }
+  const discard = () => confirmSheet({
+    title: t('Dismiss these weights?'),
+    message: t('Nothing is saved. The session will load what the app would have chosen.'),
+    confirmText: t('Dismiss'), danger: true,
+    onConfirm: () => {
+      update(s => { const ref = recordDismissal(s, marked); appendChat(s, { role: 'coach', kind: 'dismissed', ref, text: t('Understood — I will not propose those again without new evidence.') }) })
+      resolvePending({ dismissed: true }).catch(() => {})
+      refresh()
+    }
+  })
+  const later = () => { update(s => holdProposal(s, p.id)); toast(t('Kept for later')) }
+
+  const date = p.target?.iso ? `${t(DAYS[p.target.weekday])} · ${fmtDate(p.target.iso)}` : null
+  return <div className="msg coach" style={{ maxWidth: '100%', width: '100%' }}>
+    <div className="pcard">
+      <div className="pcard-hd">
+        <div className="pcard-eyebrow">{t('Next session')}</div>
+        <h2 className="pcard-h">{date || t('Estimated weights')}</h2>
+        {!!marked.summary && <RichText className="pcard-sum" text={marked.summary} />}
+        {activeToday && <p className="pcard-sum" style={{ fontSize: 13, color: 'var(--yellow)' }}>
+          {t('This session is already running. The weights apply the next time it is started.')}
+        </p>}
+      </div>
+
+      {marked.changes.map(c => {
+        const stale = c.status === 'stale'
+        return <ChangeRow key={c.id} c={c} S={S} stale={stale} hint={stale ? null : engineFor(c)}>
+          {!stale && <Check checked={accepted.has(c.id)} onChange={() => toggle(c.id)} />}
+        </ChangeRow>
+      })}
+
+      <Notes notes={marked.notes} />
+
+      <div className="pcard-note">{t('These weights are for that one session only. Your routine and its progression stay exactly as they are.')}</div>
+      <div className="pcard-ft">
+        <Button variant="primary" icon="download" onClick={apply} disabled={activeToday}>
+          {accepted.size ? t(accepted.size === 1 ? 'Load {0} weight' : 'Load {0} weights', accepted.size) : t('Load nothing')}
+        </Button>
+        <Button icon="clock" onClick={later}>{t('Leave for later')}</Button>
+        <Button onClick={discard}>{t('Dismiss all')}</Button>
+      </div>
+    </div>
+  </div>
+}
+
+/* ---------------------------------- held for later ---------------------------------- */
+
+/**
+ * A proposal the lifter put aside instead of deciding. It is still pending — nothing was
+ * accepted, declined or lost — so this is one row that says so and takes them back in. The
+ * date is the proposal's own expiry, shown because "later" is not "forever".
+ */
+function HeldCard({ p, update }) {
+  const release = () => update(s => releaseProposal(s))
+  const kind = p.kind
+  const title = kind === 'create' ? (p.bundle?.name || t('Coach plan'))
+    : kind === 'loads' ? (p.target?.iso ? t('Weights for {0}', fmtDate(p.target.iso)) : t('Estimated weights'))
+      : t((p.changes?.length === 1) ? '{0} suggestion' : '{0} suggestions', p.changes?.length || 0)
+  const until = p.expiresAt ? fmtDate(new Date(p.expiresAt).toISOString().slice(0, 10)) : null
+  return <div className="msg coach" style={{ maxWidth: '100%', width: '100%' }}>
+    <button className="recap" onClick={release}>
+      <div className="recap-top">
+        <span className="pcard-eyebrow">{t('Kept for later')}</span>
+        {until && <span className="recap-state">{t('Until {0}', until)}</span>}
+      </div>
+      <div className="recap-t">{title}</div>
+      <div className="recap-more">{t('Review now')}<Icon name="chevronRight" /></div>
+    </button>
   </div>
 }
 
@@ -595,22 +815,25 @@ function Recap({ entry, S, openSheet }) {
   const acc = decisions.filter(d => d.status === 'accepted').length
   const rej = decisions.length - acc
   const kind = entry.kind
-  const eyebrow = kind === 'create' ? t('Plan') : kind === 'debrief' ? t('Workout debrief') : t('Suggestions')
-  const state = kind === 'debrief' ? null
+  const eyebrow = kind === 'create' ? t('Plan') : kind === 'debrief' ? t('Workout debrief')
+    : kind === 'answer' ? t('Answer') : kind === 'loads' ? t('Next session') : t('Suggestions')
+  const state = (kind === 'debrief' || kind === 'answer') ? null
     : entry.dismissed ? { cls: 'no', text: t('Declined') }
       : kind === 'create' ? { cls: 'yes', text: t('Imported') }
         : rej ? { cls: 'mix', text: t('{0} accepted · {1} declined', acc, rej) } : { cls: 'yes', text: t('{0} accepted', acc) }
   const title = kind === 'create' ? (entry.bundle?.name || t('Coach plan'))
     : kind === 'debrief' ? (entry.workout?.name || t('Workout')) + (entry.score != null ? ` · ${entry.score}/10` : '')
-      : t(decisions.length === 1 ? '{0} suggestion' : '{0} suggestions', decisions.length)
+      : kind === 'answer' ? (entry.title || entry.question || t('Your question'))
+        : kind === 'loads' ? (entry.date ? t('Weights for {0}', fmtDate(entry.date)) : t('Estimated weights'))
+          : t(decisions.length === 1 ? '{0} suggestion' : '{0} suggestions', decisions.length)
   return <button className="recap" onClick={open}>
     <div className="recap-top">
       <span className="pcard-eyebrow">{eyebrow}</span>
       {state && <span className={'recap-state ' + state.cls}>{state.text}</span>}
     </div>
     <div className="recap-t">{title}</div>
-    {!!entry.summary && <div className="recap-s">{entry.summary}</div>}
-    {kind === 'review' && !!decisions.length && <div className="recap-chips">
+    {!!entry.summary && <RichText className="recap-s" text={entry.summary} />}
+    {(kind === 'review' || kind === 'loads') && !!decisions.length && <div className="recap-chips">
       {decisions.slice(0, 4).map(d => <span key={d.id} className={'recap-chip ' + (d.status === 'accepted' ? 'yes' : 'no')}><Icon name={d.status === 'accepted' ? 'check' : 'xmark'} />{changeTitle(d, S)}</span>)}
       {decisions.length > 4 && <span className="recap-chip">+{decisions.length - 4}</span>}
     </div>}
@@ -627,9 +850,10 @@ function ProposalDetail({ entry, S }) {
   const weekDays = useMemo(() => new Set(Object.keys(b?.week || {}).map(Number)), [b])
   return <div className="pdetail">
     <div className="pcard-hd" style={{ paddingLeft: 0, paddingRight: 0 }}>
-      <div className="pcard-eyebrow">{kind === 'create' ? t('Plan') : kind === 'debrief' ? t('Workout debrief') : t('Suggestions')} · {fmtDate(new Date(entry.at).toISOString().slice(0, 10))}</div>
-      <h2 className="pcard-h">{kind === 'create' ? (b?.name || t('Coach plan')) : kind === 'debrief' ? (entry.workout?.name || t('Workout')) : t(entry.decisions?.length === 1 ? '{0} suggestion' : '{0} suggestions', entry.decisions?.length || 0)}</h2>
-      {!!entry.summary && <p className="pcard-sum">{entry.summary}</p>}
+      <div className="pcard-eyebrow">{kind === 'create' ? t('Plan') : kind === 'debrief' ? t('Workout debrief') : kind === 'answer' ? t('Answer') : kind === 'loads' ? t('Next session') : t('Suggestions')} · {fmtDate(new Date(entry.at).toISOString().slice(0, 10))}</div>
+      <h2 className="pcard-h">{kind === 'create' ? (b?.name || t('Coach plan')) : kind === 'debrief' ? (entry.workout?.name || t('Workout')) : kind === 'answer' ? (entry.title || t('Your question')) : kind === 'loads' ? (entry.date ? t('Weights for {0}', fmtDate(entry.date)) : t('Estimated weights')) : t(entry.decisions?.length === 1 ? '{0} suggestion' : '{0} suggestions', entry.decisions?.length || 0)}</h2>
+      {!!entry.question && <p className="pcard-sum" style={{ fontSize: 13 }}>{entry.question}</p>}
+      {!!entry.summary && <RichText className="pcard-sum" text={entry.summary} />}
       {entry.dismissed && <p className="pcard-sum" style={{ color: 'var(--red)' }}>{t('You declined this.')}</p>}
       {!!entry.evidence?.sessions && <p className="pcard-sum" style={{ fontSize: 13 }}>
         {t('Based on your last {0} sessions', entry.evidence.sessions)}{entry.evidence.from ? ` · ${fmtDate(entry.evidence.from)} – ${fmtDate(entry.evidence.to)}` : ''}
@@ -638,6 +862,17 @@ function ProposalDetail({ entry, S }) {
 
     {kind === 'review' && <>
       <Insights S={S} window={entry.evidence} />
+      {(entry.decisions || []).map(d => <ChangeRow key={d.id} c={d} S={S} stale={d.status === 'stale'}
+        badge={<span className={'recap-state ' + (d.status === 'accepted' ? 'yes' : 'no')}>{d.status === 'accepted' ? t('Accepted') : d.status === 'stale' ? t('Expired') : t('Declined')}</span>} />)}
+      <Notes notes={entry.notes} />
+    </>}
+
+    {kind === 'answer' && <>
+      <div className="pcard-ans"><RichText text={entry.answer} /></div>
+      <Notes notes={entry.notes} />
+    </>}
+
+    {kind === 'loads' && <>
       {(entry.decisions || []).map(d => <ChangeRow key={d.id} c={d} S={S} stale={d.status === 'stale'}
         badge={<span className={'recap-state ' + (d.status === 'accepted' ? 'yes' : 'no')}>{d.status === 'accepted' ? t('Accepted') : d.status === 'stale' ? t('Expired') : t('Declined')}</span>} />)}
       <Notes notes={entry.notes} />
@@ -662,7 +897,7 @@ function ProposalDetail({ entry, S }) {
 /** Every proposal ever made, newest first. Nothing the Coach said is gone after a decision. */
 function HistorySheet({ S, close, openSheet }) {
   const log = [...(S.coach?.log || [])].reverse()
-  const icon = { create: ['clipboard', 'var(--indigo)'], review: ['sparkles', 'var(--acc)'], debrief: ['checkCircle', 'var(--green)'], revert: ['reset', 'var(--blue)'] }
+  const icon = { create: ['clipboard', 'var(--indigo)'], review: ['sparkles', 'var(--acc)'], debrief: ['checkCircle', 'var(--green)'], revert: ['reset', 'var(--blue)'], answer: ['info', 'var(--teal)'], loads: ['dumbbell', 'var(--green)'] }
   return <div className="chat-menu">
     <h3>{t('Everything the Coach proposed')}</h3>
     {!log.length && <div className="chat-empty">{t('Nothing yet. Every plan, suggestion and debrief will be kept here — whether you said yes or no.')}</div>}
@@ -674,9 +909,12 @@ function HistorySheet({ S, close, openSheet }) {
         const title = e.kind === 'create' ? (e.bundle?.name || t('Coach plan')) + (e.iteration > 1 ? ` · ${t('Revision {0}', e.iteration)}` : '')
           : e.kind === 'debrief' ? t('Debrief: {0}', e.workout?.name || t('Workout')) + (e.score != null ? ` · ${e.score}/10` : '')
             : e.kind === 'revert' ? t('Reverted the last Coach changes.')
-              : t(n === 1 ? '{0} suggestion' : '{0} suggestions', n)
+              : e.kind === 'answer' ? (e.title || t('Answer'))
+                : e.kind === 'loads' ? t(n === 1 ? '{0} weight for one session' : '{0} weights for one session', n)
+                  : t(n === 1 ? '{0} suggestion' : '{0} suggestions', n)
         const sub = fmtDate(new Date(e.at).toISOString().slice(0, 10)) + ' · ' + (e.kind === 'debrief' ? String(e.summary || '').slice(0, 60)
-          : e.dismissed ? t('Declined') : e.kind === 'create' ? t('Imported') : e.kind === 'revert' ? '' : t('{0} accepted · {1} declined', acc, n - acc))
+          : e.kind === 'answer' ? String(e.answer || '').slice(0, 60)
+            : e.dismissed ? t('Declined') : e.kind === 'create' ? t('Imported') : e.kind === 'revert' ? '' : t('{0} accepted · {1} declined', acc, n - acc))
         return <Row key={e.id} icon={ic} iconTint={tint} title={title} subtitle={sub} accessory="chevron"
           onClick={() => { close(); openSheet(() => <ProposalDetail entry={e} S={S} />) }} />
       })}
@@ -740,7 +978,6 @@ function CohortSheet({ S, update, toast }) {
 }
 
 /* ------------------------------ profile mode: connect ------------------------------ */
-
 /* The first screen of profile mode: the Coach exists, but it is nobody's until this profile
    connects an account. Nothing here loads the chat — there is nothing to say yet. */
 function ConnectAccount({ nav }) {

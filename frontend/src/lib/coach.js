@@ -14,8 +14,9 @@
 
 import { EXIDX } from './exercises.js'
 import { modeOf, isBw, isPerSide, cleanupSg } from './history.js'
-import { uid, todayISO, DAYN } from './format.js'
+import { uid, todayISO, DAYN, fmtNum } from './format.js'
 import { mergePlan } from './plan-share.js'
+import { setPrefill } from './prefill.js'
 import { POLICIES } from './progression.js'
 import { t, exerciseNameFor } from './i18n.js'
 
@@ -38,7 +39,12 @@ export const emptyCoach = () => ({
   // server-side (or in the phone's device file) until it is applied or dismissed.
   chat: [],
   // How long the last few jobs took, so the typing bubble can say "usually about 2 minutes".
-  timings: []
+  timings: [],
+  // The pending proposal the lifter chose to look at later, if any. The proposal itself stays
+  // where it always was (server-side, or the phone's device file) — this is only "don't put the
+  // card in front of me right now". It stops matching the moment the pending changes, so a new
+  // proposal is never hidden by an old one.
+  held: null
 })
 const coachOf = s => (s.coach = s.coach || emptyCoach())
 
@@ -148,6 +154,9 @@ export function currentValue(S, change) {
     case 'routine-prog': return r?.prog ?? null
     case 'rename-routine': return r?.name ?? null
     case 'week': return [].concat(S.week?.[change.target?.weekday] ?? [])   // routine-id list; [] = rest
+    // A load estimate is about the session, not the plan, but its `before` still names the
+    // plan's working weight so an edit made by hand in the meantime is not silently overwritten.
+    case 'weight': return e?.weight ?? null
     default: return undefined            // structural changes have no single scalar to compare
   }
 }
@@ -281,6 +290,21 @@ export function appendLog(s, entry) {
   return e.id
 }
 export const logEntry = (S, id) => (S?.coach?.log || []).find(e => e.id === id) || null
+
+/* ============================ holding a proposal ============================ */
+
+// "Leave it for later" is not a decision: accepting and dismissing are, and forcing one of them
+// on somebody who wants to sit with the numbers is how a proposal gets declined to make the
+// screen go away. The proposal stays pending (server-side, or in the phone's file), and this is
+// only the switch that collapses the card into a row until they come back to it.
+export function holdProposal(s, id) {
+  if (!id) return
+  coachOf(s).held = { id, at: Date.now() }
+}
+export function releaseProposal(s) {
+  coachOf(s).held = null
+}
+export const heldId = S => S?.coach?.held?.id || null
 
 /**
  * What a created plan looked like, small enough to keep: names, days and prescriptions, no
@@ -567,14 +591,18 @@ export function applyChangeSet(s, proposal, acceptedIds) {
 
 /** Turned down whole, or expired: recorded so a later review knows not to re-propose it. */
 export function recordDismissal(s, proposal) {
+  const kind = proposal.kind === 'create' ? 'create' : proposal.kind === 'loads' ? 'loads' : 'review'
   const logId = appendLog(s, {
-    kind: proposal.kind === 'create' ? 'create' : 'review', at: Date.now(), proposalId: proposal.id,
+    kind, at: Date.now(), proposalId: proposal.id,
     summary: proposal.summary || '', dismissed: true,
     evidence: proposal.evidence || null, notes: proposal.notes || [],
     ...(proposal.bundle ? { bundle: lightBundle(proposal.bundle), iteration: proposal.iteration || 1 } : {}),
+    ...(proposal.target ? { target: proposal.target } : {}),
     decisions: (proposal.changes || []).map(c => decisionOf(c, 'rejected'))
   })
-  if (proposal.kind !== 'create') coachOf(s).lastReview = { at: Date.now() }
+  // A loads proposal is not a review: it says nothing about whether the block has been looked
+  // at, so it must not move the date a review reads from.
+  if (kind === 'review') coachOf(s).lastReview = { at: Date.now() }
   return logId
 }
 
@@ -586,6 +614,57 @@ export function recordDebrief(s, proposal) {
     summary: proposal.summary || '', score: proposal.score ?? null,
     highlights: proposal.highlights || [], watch: proposal.watch || [], nextTime: proposal.nextTime || []
   })
+}
+
+/**
+ * An answer to a question. Nothing to apply, nothing to revert — it is kept in the log the way
+ * a debrief is, so the thread can show it months later without the chat carrying the text.
+ */
+export function recordAnswer(s, proposal) {
+  return appendLog(s, {
+    kind: 'answer', at: Date.now(), proposalId: proposal.id,
+    question: proposal.question || '', title: proposal.title || '',
+    answer: proposal.answer || '', notes: proposal.notes || [],
+    ...(proposal.exId ? { exId: proposal.exId } : {})
+  })
+}
+
+/**
+ * The confirmed Coach loads, written as a one-session override — `S.prefill[date]`.
+ *
+ * Deliberately NOT applyChangeSet: a load estimate may not edit the routine, so there is no
+ * snapshot and no revert. The plan and the progression engine are exactly as they were; when
+ * the session is built, `session-start` reads this map once, and when it is finished the entry
+ * is consumed. Checked against the same staleness the review screen uses: an exercise that has
+ * left the routine in the meantime cannot be pre-filled.
+ */
+export function applyLoads(s, proposal, acceptedIds) {
+  const date = proposal?.target?.iso
+  const accepted = new Set(acceptedIds || [])
+  const applicable = (proposal?.changes || []).filter(c => c.type === 'weight' && c.status !== 'stale')
+  const chosen = applicable.filter(c => accepted.has(c.id))
+  if (!date || !chosen.length) return { applied: 0 }
+
+  const decisions = []
+  let applied = 0
+  chosen.forEach(c => {
+    if (c.target?.exId && setPrefill(s, date, c.target.exId, c.after)) {
+      applied++
+      decisions.push(decisionOf(c, 'accepted'))
+    } else {
+      decisions.push(decisionOf(c, 'rejected'))
+    }
+  })
+  const declined = (proposal.changes || [])
+    .filter(c => !accepted.has(c.id))
+    .map(c => decisionOf(c, c.status === 'stale' ? 'stale' : 'rejected'))
+
+  const logId = appendLog(s, {
+    kind: 'loads', at: Date.now(), proposalId: proposal.id, date,
+    summary: proposal.summary || '', evidence: proposal.evidence || null,
+    notes: proposal.notes || [], decisions: [...decisions, ...declined]
+  })
+  return { applied, rejected: declined.length, logId }
 }
 
 /* ============================ display helpers ============================ */
@@ -637,6 +716,8 @@ export function changeTitle(c, S) {
     case 'sec': return t('{0}: hold time', ex)
     case 'cardio': return t('{0}: duration & pace', ex)
     case 'inc': return t('{0}: load step', ex)
+    // Only a load proposal carries this one; a review never does.
+    case 'weight': return t('{0}: working weight', ex)
     case 'exercise-prog': return t('{0}: progression', ex)
     case 'routine-prog': return t('Routine progression')
     case 'reorder': return t('Reorder exercises')
@@ -667,5 +748,11 @@ export function changeValues(c, S) {
   }
   if (['add-exercise', 'add-routine', 'reorder'].includes(c.type)) return null
   if (['remove-exercise', 'remove-routine'].includes(c.type)) return null
+  // A weight reads with its unit — "82.5" alone on a load screen is a number with no scale.
+  if (c.type === 'weight') {
+    const unit = S?.unit || 'kg'
+    const fmtW = v => (v == null ? '—' : fmtNum(v) + ' ' + unit)
+    return { before: fmtW(c.before), after: fmtW(c.after) }
+  }
   return { before: fmt(c.before), after: fmt(c.after) }
 }

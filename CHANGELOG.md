@@ -5,6 +5,44 @@
 Trabajo propio de este fork sobre v1.3.7. Nada de esto va al repo original salvo lo que se
 indica aparte (la traducción se propone en el **PR #245**).
 
+- 💬 **Entrenador: preguntas con foco y 1RM.** Dos tareas nuevas en el chat, además de plan,
+  revisión y evaluación: **Preguntar por un ejercicio** (elige ejercicio y te da su 1RM estimado,
+  la serie y fecha de la que sale, su gráfica y cómo van las últimas sesiones) y **Hacer una
+  pregunta** (cualquier cosa sobre tu entrenamiento, con una ventana compacta de contexto). El
+  payload lleva solo lo que la pregunta necesita — el 1RM lo calcula la app (espejo de
+  `lib/onerm.js` en `api/coach/core/onerm.js`, fijado con `coach-parity.test.js`) y la tarjeta
+  pinta los números de `S`, nunca los de la prosa. Rutas `POST /api/coach/ask` y
+  `POST /api/coach/loads`; tareas `ask`/`loads` en el pipeline, prompts `ask.md`/`loads.md` y
+  despacho también en el móvil BYOK (`coach-local.js`) y en la demo (`coach-demo.js`).
+- 🏋️ **Entrenador: pesos de la próxima sesión (sin tocar el plan).** **Pesos de mi próxima
+  sesión** (o de una rutina concreta) estima la carga de cada ejercicio a partir de tus últimas
+  sesiones, su RIR y sus estancamientos; la tarjeta muestra cada propuesta **junto a lo que
+  cargaría el motor**, y lo que confirmes se guarda en `S.prefill[fecha]` — una anulación de una
+  sola sesión que `beginWorkout` lee al construirla, que nunca edita la rutina ni la progresión y
+  que se consume al terminar (lo que pase sin entrenar se barre al cargar). Es la única tarea que
+  puede proponer `weight`: una revisión lo sigue rechazando. Sí, funciona con la clave compartida
+  y con la de cada persona (en compartida viaja menos contexto y aplican los topes; en perfil,
+  más profundo, que lo paga quien lo usa).
+- ✍️ **Formato propio en las respuestas del Entrenador.** Las burbujas entienden `**negrita**`,
+  `*cursiva*`, `##` como rótulo en mayúsculas y `- ` para listas (`lib/rich-text.js` +
+  `components/RichText.jsx`), y el prompt común explica el mini-formato. Un marcador sin cerrar
+  se muestra literal: nada de markdown crudo en pantalla y nada de HTML.
+- 🕒 **Propuestas: aceptar, rechazar o dejar para después.** Tercera opción en las tarjetas de
+  plan, revisión y pesos: mantiene la propuesta pendiente (nada aceptado ni rechazado) y la
+  colapsa en el hilo como «Propuesta en espera · Hasta el …» hasta reabrirla con «Revisar
+  ahora». El estado vive en `S.coach.held` y deja de aplicar en cuanto el pendiente cambia.
+- ✅ **Elegir un ejercicio se confirma antes de preguntar.** «Preguntar por un ejercicio» ya no
+  lanza la pregunta con el selector abierto encima: al elegir, se abre la hoja con el ejercicio
+  marcado en verde y la pregunta ya escrita (editable, y nunca pisa lo que tú escribas), con
+  «Preguntar» y «Quitar ejercicio» (`components/AskSheet.jsx`, 5 tests propios).
+- 🎯 **Reemplazos con criterio, no con lo que hubiera a mano.** El `ask` llevaba contexto del
+  ejercicio pero **ninguna biblioteca**, así que a «¿cuál sería un reemplazo de esta elevación
+  lateral?» solo podía responder con nombres que ya estaban en tu plan (de ahí la elevación de
+  gemelos y la sentadilla búlgara). Ahora `ask` manda una porción acotada del catálogo (30/50)
+  **encabezada por la parte del cuerpo del ejercicio** (`librarySlice` con `prefer`, más `focus.bp`
+  resuelto también para ejercicios propios), el prompt `ask` explica la regla de reemplazo y
+  `common.md` la respalda. Tests: `coach-focused.test.js` cubre el caso exacto.
+
 - 🇪🇸 **Nombres de ejercicios en español (completo: 1.324).** Pack `frontend/src/exercise-names/es.js`
   generado desde `scripts/exercise-name-sources/es.json` con `scripts/build-es-exercise-names.mjs`;
   se muestra «español (english)» y la búsqueda es bilingüe. Verificado con 12 reglas de calificadores
