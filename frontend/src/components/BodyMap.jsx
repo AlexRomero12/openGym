@@ -81,3 +81,24 @@ export function BodyMapLegend() {
     <div className="hm-c l3" /><div className="hm-c l4" /> {t('More')}
   </div>
 }
+
+// Versión compacta para las tarjetas del feed de Amigos: misma geometría y misma rampa de
+// color, sin `<title>` por path (no hay hover que lo lea) y con las dos vistas en miniatura.
+// Es una imagen: la interacción vive en el botón que la envuelve (chips al tocar).
+export function MiniBodyMap({ load = {}, body = 'male', className = '', label }) {
+  const paths = useBodyPaths()
+  const levels = levelsOf(load)
+  const g = paths && (paths[body] || paths.male)
+  return (
+    <div className={'bodymap bm-mini ' + className} role="img" aria-label={label}>
+      {g ? Object.entries(g).map(([viewName, view]) => (
+        <svg key={viewName} className="bm-v" viewBox={view.vb} aria-hidden="true">
+          {INERT.map(slug => (view.p[slug] || []).map((d, i) =>
+            <path key={slug + i} className="bm-sil" d={d} />))}
+          {MUSCLES.map(slug => (view.p[slug] || []).map((d, i) =>
+            <path key={slug + i} className={'bm-m l' + (levels[slug] || 0)} d={d} />))}
+        </svg>
+      )) : <div className="bm-ph" aria-hidden="true" />}
+    </div>
+  )
+}

@@ -61,12 +61,25 @@ indica aparte (la traducción se propone en el **PR #245**).
   (👑 🧱 🎯 🔥 ⚔️ + campeón anterior) y temporada (semana ISO). El api agrega `color`, `trend` y
   `series` semanales por entrada, más el tope `maxExercises` (Top N: más gente → más veces
   entrenado → más pesado).
+- 🗺️ **Territorios semanales de verdad.** El mapa de Amigos ahora compite solo con la **semana en
+  curso**: `buildRanking` agrega `weekExercises` (mejor e1RM ×peso por ejercicio, aunque lo haya
+  hecho una sola persona; sin peso corporal no hay score) y `lib/territory.js` agrega por músculo,
+  exige los dos contendientes recién ahí y cae a los secundarios marcando `direct:false` cuando
+  nadie lo trabaja directo. Con un api viejo se usa la última semana de `series`, que es la misma
+  ventana. Tests: `api/test/friends-week.test.js` fija el contrato y `lib/territory.test.js` el
+  reparto.
 - 📣 **Social V1 — Actividad + Rutinas** (`api/social.js`, `data/social.json`). Feed de sesiones
   terminadas como snapshot (rutina, minutos, volumen, series, **destacados en kg**, PRs),
   reacciones **🔥👏💪**, borrar lo propio y **auto-publicación opt-in** (`social.autoShare`); y
   **rutinas del grupo**: publicar/actualizar/despublicar (con `rid` de vínculo) y copiar a tu plan
   con `mergePlan` (ids nuevos, no pisa nada). Mismo consentimiento que el ranking; poda automática
   (90 días / 100 posts / 30 rutinas).
+- 🫀 **Publicaciones con cuerpo.** Cada tarjeta del feed de Actividad suma su **mini-mapa** de
+  músculos (frente y espalda) y los despliega en chips con las series al tocarlo; los **4
+  destacados** de siempre se amplían con **«+N más»** hasta la lista completa (20). La distribución
+  viaja calculada por el cliente (`lib/feed-activity.js`, con test) en series efectivas por
+  músculo canónico, y `api/social.js` la valida y acota; los posts anteriores estiman el mapa
+  desde sus destacados (marcado «est.») hasta que se podan solos.
 - 🧩 **Ajustes finos.** «Por ejercicio» estricto (solo compartidos; con un solo perfil queda
   vacío); aviso del mapa de territorios cuando no hay 2+ personas; tabla de historial con scroll
   horizontal; fila de progresión 2×2 en teléfonos; íconos de rutina (glyph keys como

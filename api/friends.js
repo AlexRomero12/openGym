@@ -427,6 +427,23 @@ export function buildRanking({ users, states }, config, now = new Date(), norm =
     .slice(0, maxExercises || undefined)
     .map(({ _heavy, ...ex }) => ex)
 
+  // Territorios semanales: el mejor e1RM de CADA ejercicio en la semana en curso, por
+  // participante. A diferencia de `exercises` (histórico, mínimo de 2 y Top N), acá entra todo
+  // ejercicio con datos de esta semana aunque lo haya hecho una sola persona — el mapa agrega
+  // por músculo del lado del frontend y recién ahí exige dos contendientes. Solo viaja `rel`
+  // (el mapa siempre compara ×peso); sin bodyweight no hay score y el ejercicio no entra.
+  const weekExMap = new Map()
+  for (const p of participants) {
+    if (!p.shares.lifts) continue
+    for (const [id, best] of p._thisWeek.entries()) {
+      const bwSet = bwAt(p._bw, best.d)
+      if (!bwSet) continue
+      if (!weekExMap.has(id)) weekExMap.set(id, [])
+      weekExMap.get(id).push({ uid: p.uid, rel: round1((best.est * p._toKg) / bwSet) })
+    }
+  }
+  const weekExercises = [...weekExMap.entries()].map(([id, entries]) => ({ id, entries }))
+
   const history = weeks.map((w, idx) => {
     const values = {}
     for (const p of participants) {
@@ -474,7 +491,7 @@ export function buildRanking({ users, states }, config, now = new Date(), norm =
       uid: p.uid, name: p.name, emoji: p.emoji, shares: p.shares, hasBodyweight: p.hasBodyweight,
       week: p.week, streakWeeks: p.streakWeeks, lastWorkout: p.lastWorkout, color: p.color,
     })),
-    ranking, improvement, exercises, history,
+    ranking, improvement, exercises, weekExercises, history,
   }
 }
 

@@ -16,6 +16,16 @@ const POSTS_DAYS = 90
 const FEED_MAX = 50
 const ROUTINES_MAX = 30
 
+/* Los 18 músculos canónicos que dibuja el cuerpo (frontend/src/lib/muscles.js). El contexto de
+ * build del api no incluye las librerías del frontend, así que la lista se replica acá con el
+ * mismo criterio que las reglas de friends.js: si el frontend agrega un músculo, se cambia en
+ * los dos lados. */
+const MUSCLE_SLUGS = [
+  'trapezius', 'deltoids', 'chest', 'upper-back', 'serratus', 'biceps', 'triceps', 'forearm',
+  'abs', 'obliques', 'lower-back', 'gluteal', 'quadriceps', 'hamstring', 'adductors',
+  'hip-flexors', 'calves', 'tibialis',
+]
+
 const fileFor = dataDir => path.join(dataDir, 'social.json')
 function readStore(dataDir) {
   try {
@@ -71,12 +81,23 @@ function cleanPost(raw, uid) {
     return { id, w, r, ...(n ? { n } : {}) }
   }).filter(Boolean)
   const prs = (Array.isArray(p.prs) ? p.prs : []).map(idOf).filter(Boolean).slice(0, 30)
+  // Series efectivas por músculo, calculadas por el cliente al publicar (misma librería que el
+  // resumen de fin de entreno). Se recorre la lista canónica, así que claves desconocidas y
+  // valores no numéricos caen solos; el tope evita que un post inventado ensucie los mapas.
+  const muscles = {}
+  if (p.muscles && typeof p.muscles === 'object' && !Array.isArray(p.muscles)) {
+    for (const slug of MUSCLE_SLUGS) {
+      const n = num(p.muscles[slug], 0, 300, 1)
+      if (n) muscles[slug] = n
+    }
+  }
   return {
     id: crypto.randomBytes(8).toString('base64url'),
     uid,
     created: new Date().toISOString(),
     routine, minutes, volumeKg, sets,
     unit: p.unit === 'lb' ? 'lb' : 'kg',
+    ...(Object.keys(muscles).length ? { muscles } : {}),
     top, prs, reactions: {},
   }
 }
@@ -210,6 +231,7 @@ export function socialData(dataDir, viewerUid = null) {
     .map(p => ({
       id: p.id, uid: p.uid, created: p.created, routine: p.routine || null,
       minutes: p.minutes, volumeKg: p.volumeKg, sets: p.sets, unit: p.unit,
+      muscles: p.muscles || null,
       top: p.top || [], prs: p.prs || [],
       counts: EMOJIS.reduce((o, e) => {
         const n = Object.values(p.reactions || {}).filter(v => v === e).length

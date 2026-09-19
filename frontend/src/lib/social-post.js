@@ -4,8 +4,10 @@
 import { api } from './api.js'
 import { isWarmupRow } from './workout-model.js'
 import { EXIDX } from './exercises.js'
+import { loadOfWorkouts } from './muscles.js'
 
 const LB_TO_KG = 0.45359237
+const round1 = v => Math.round(v * 10) / 10
 
 /** Resumen de un entreno terminado (w) para el feed. */
 export function buildSessionPost(S, w, { prs = [], e1prs = [] } = {}) {
@@ -28,12 +30,19 @@ export function buildSessionPost(S, w, { prs = [], e1prs = [] } = {}) {
     })
   }
   top.sort((a, b) => b.w - a.w)
+  // Distribución muscular de la sesión, en series efectivas (mismo helper que el resumen de
+  // fin de entreno): le da al feed el mapa corporal sin mandar los entrenos crudos. Los
+  // calentamientos quedan afuera dentro de loadOfWorkouts.
+  const muscles = Object.fromEntries(
+    Object.entries(loadOfWorkouts([w])).filter(([, sets]) => sets > 0).map(([slug, sets]) => [slug, round1(sets)]),
+  )
   return {
     routine: routine ? { name: routine.name || '', emoji: routine.emoji || '' } : null,
     minutes: Math.max(1, Math.round(((w.end || Date.now()) - (w.start || Date.now())) / 60000)),
     volumeKg: Math.round(toKg(Number(w.vol) || 0) * 10) / 10,
     sets,
     unit: 'kg',
+    ...(Object.keys(muscles).length ? { muscles } : {}),
     top: top.slice(0, 20),
     prs: [...new Set([...prs, ...e1prs.map(p => p.id)])].slice(0, 30),
   }

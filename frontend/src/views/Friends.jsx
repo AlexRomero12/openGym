@@ -6,13 +6,15 @@ import { useCallback, useEffect, useState } from 'react'
 import { api } from '../lib/api.js'
 import { EXIDX, exOr } from '../lib/exercises.js'
 import { ACCENTS, fmtNum, fmtVol } from '../lib/format.js'
-import { muscleGroupsOf, musclesOf, MUSCLES } from '../lib/muscles.js'
 import { Button, Segmented, Switch } from '../components/ui.jsx'
 import LineChart from '../components/LineChart.jsx'
+import { MiniBodyMap } from '../components/BodyMap.jsx'
 import TerritoryMap, { MUSCLE_ES } from '../components/TerritoryMap.jsx'
 import Icon, { ICON_NAMES } from '../components/Icon.jsx'
 import { glyphOf } from '../lib/glyphs.js'
+import { postMuscles } from '../lib/feed-activity.js'
 import { mergePlan } from '../lib/plan-share.js'
+import { territoryOf } from '../lib/territory.js'
 import { confirmSheet } from '../sheets.jsx'
 import { useStore } from '../store/useStore.js'
 import { useUI } from '../store/useUI.js'
@@ -101,7 +103,6 @@ export default function Friends() {
   const terSel = tSlug && territories ? territories.owners[tSlug] : null
   const terOwners = data && territories ? data.participants.filter(p => territories.list.some(t => t.uid === p.uid)) : []
   const terCounts = territories ? terOwners.map(p => `${p.name.split(' ')[0]} ${territories.list.filter(t => t.uid === p.uid).length}`) : []
-  const terConq = territories ? territories.list.filter(t => t.recent) : []
 
   const sub = data
     ? `Temporada ${isoWeek(data.week.start)} · ${weekLabel(data.week.start, data.week.end)} · ${data.participantCount} participante${data.participantCount === 1 ? '' : 's'}`
@@ -193,8 +194,8 @@ export default function Friends() {
         <h2>Mapa de territorios</h2>
         {territories.list.length > 0 ? <>
           <div className="dim small" style={{ marginBottom: 8, lineHeight: 1.4 }}>
-            Cada músculo lo pinta su dueño: mejor ×peso entre sus ejercicios, priorizando el
-            trabajo directo. Los grises todavía no tienen datos compartidos.
+            Cada músculo lo pinta su dueño con lo entrenado esta semana: mejor ×peso entre sus
+            ejercicios, priorizando el trabajo directo. Los grises no tienen datos esta semana.
           </div>
           <TerritoryMap owners={territories.owners} onMuscle={slug => setTSlug(s => (s === slug ? null : slug))} selected={tSlug} />
           <div className="fx-legend">
@@ -207,19 +208,16 @@ export default function Friends() {
           <div className="dim small" style={{ marginTop: 8, textAlign: 'center', lineHeight: 1.4 }}>
             {tSlug
               ? (terSel
-                ? <><b style={{ color: 'var(--label)', fontWeight: 600 }}>{MUSCLE_ES[tSlug]}</b> · {terSel.name} · ×{fmtNum(terSel.avg)}{terSel.direct ? '' : ' · sin trabajo directo'}{terSel.recent ? ' · 🏴 esta semana' : ''}</>
+                ? <><b style={{ color: 'var(--label)', fontWeight: 600 }}>{MUSCLE_ES[tSlug]}</b> · {terSel.name} · ×{fmtNum(terSel.avg)}{terSel.direct ? '' : ' · sin trabajo directo'}</>
                 : `${MUSCLE_ES[tSlug]} · sin dueño todavía`)
               : `Tocá un músculo para ver el dueño${terCounts.length ? ' · ' + terCounts.join(' · ') : ''}`}
           </div>
-          {terConq.length > 0 && <div className="dim small" style={{ marginTop: 4, textAlign: 'center' }}>
-            🏴 Esta semana: {terConq.map(t => `${MUSCLE_ES[t.slug]} (${t.name.split(' ')[0]})`).join(' · ')}
-          </div>}
         </> : <>
           <TerritoryMap owners={{}} />
           <div className="dim small" style={{ marginTop: 10, textAlign: 'center', lineHeight: 1.5 }}>
-            El mapa se activa cuando haya <b style={{ color: 'var(--label)', fontWeight: 600 }}>al menos 2 personas</b> en el ranking
-            con datos en los mismos ejercicios.
-            {data.participantCount >= 2 && <><br />Entrenen los mismos ejercicios y los músculos se van a ir pintando 🏴</>}
+            El mapa se activa cuando haya <b style={{ color: 'var(--label)', fontWeight: 600 }}>al menos 2 personas</b> con
+            datos <b style={{ color: 'var(--label)', fontWeight: 600 }}>esta semana</b> en los mismos ejercicios.
+            {data.participantCount >= 2 && <><br />Entrenen esta semana y los músculos se van a ir pintando 🏴</>}
           </div>
         </>}
       </div>}
@@ -377,7 +375,8 @@ export default function Friends() {
     </>}
 
     {view === 'feed' && (user && !isGuest
-      ? <Feed social={social} byUid={byUid} tintOf={tintOf} me={me} sharing={sharing} onChanged={loadSocial} />
+      ? <Feed social={social} byUid={byUid} tintOf={tintOf} me={me}
+          sharing={sharing} body={S.body} onChanged={loadSocial} />
       : <div className="card dim" style={{ padding: 24 }}>Ingresá con tu perfil para ver la actividad del grupo.</div>)}
 
     {view === 'routines' && (user && !isGuest
@@ -453,8 +452,73 @@ const timeAgo = iso => {
 
 const RX = ['🔥', '👏', '💪']
 
+// Una publicación del feed: la tarjeta clásica más el mini-mapa muscular. Tocar el mapa
+// despliega las series por músculo (los posts viejos lo estiman desde los destacados).
+function PostCard({ p, byUid, tintOf, me, body, onReact, onRemove }) {
+  const [openMap, setOpenMap] = useState(false)
+  const [openTop, setOpenTop] = useState(false)
+  const author = byUid.get(p.uid)
+  const mine = me && p.uid === me
+  const rEmoji = p.routine && !ICON_NAMES.includes(p.routine.emoji) ? p.routine.emoji : ''
+  const rname = p.routine ? [rEmoji, p.routine.name].filter(Boolean).join(' ') : ''
+  const { load, estimated } = postMuscles(p)
+  const chips = Object.entries(load).sort((a, b) => b[1] - a[1])
+  // La tarjeta muestra 4 destacados; el resto (hasta 20) sale al tocar «+N más».
+  const visibleTop = openTop ? p.top : p.top.slice(0, 4)
+
+  return <div className="card feed-card">
+    <div className="feed-hd">
+      <span className="lrow-i" style={tintOf(p.uid)}>{author?.emoji || '💪'}</span>
+      <div className="lrow-m">
+        <div className="lrow-t">{author?.name || p.uid}</div>
+        <div className="lrow-s">{timeAgo(p.created)}{rname ? ' · ' + rname : ''}</div>
+      </div>
+      {mine && <Button size="sm" variant="ghost" onClick={onRemove}>Borrar</Button>}
+    </div>
+    <div className="feed-body">
+      {chips.length > 0 && <button className="feed-map" aria-expanded={openMap} aria-label="Músculos entrenados"
+        onClick={() => setOpenMap(o => !o)}>
+        <MiniBodyMap load={load} body={body} />
+        {estimated && <span className="feed-map-est">est.</span>}
+      </button>}
+      <div className="feed-main">
+        <div className="feed-stats">
+          <span><b>{p.minutes}</b> min</span>
+          {p.volumeKg > 0 && <span><b>{fmtVol(p.volumeKg, 'kg')}</b></span>}
+          <span><b>{p.sets}</b> series</span>
+        </div>
+        {p.top.length > 0 && <div className="feed-top">
+          {visibleTop.map(s => (
+            <div className="feed-set" key={s.id}>
+              <span className="feed-set-n">{exLabel(s.id, s.n)}</span>
+              <span className="feed-set-v">{fmtNum(s.w)} kg × {s.r}</span>
+            </div>
+          ))}
+          {p.top.length > 4 && <button className="feed-more" aria-expanded={openTop}
+            onClick={() => setOpenTop(o => !o)}>
+            {openTop ? 'Mostrar menos' : `+${p.top.length - 4} más`}
+          </button>}
+        </div>}
+      </div>
+    </div>
+    {chips.length > 0 && openMap && <div className="mchips" style={{ marginTop: 8 }}>
+      {chips.map(([slug, sets]) => <span className="mchip" key={slug}>{MUSCLE_ES[slug] || slug} · {fmtNum(sets)}</span>)}
+    </div>}
+    {p.prs.length > 0 && <div className="small" style={{ color: 'var(--acc)', marginTop: 8 }}>
+      🎯 {p.prs.length} PR{p.prs.length > 1 ? 's' : ''}: {p.prs.slice(0, 3).map(id => exLabel(id)).join(' · ')}{p.prs.length > 3 ? ' …' : ''}
+    </div>}
+    <div className="rx-row">
+      {RX.map(e => (
+        <button key={e} className={'rx' + (p.mine === e ? ' on' : '')} onClick={() => onReact(e)}>
+          {e}{p.counts[e] ? ' ' + p.counts[e] : ''}
+        </button>
+      ))}
+    </div>
+  </div>
+}
+
 // Feed del grupo: publicaciones de sesiones terminadas (snapshot: nunca entrenos crudos ni pesos).
-function Feed({ social, byUid, tintOf, me, sharing, onChanged }) {
+function Feed({ social, byUid, tintOf, me, sharing, body, onChanged }) {
   const autoShare = useStore(s => s.S.social?.autoShare)
   const update = useStore(s => s.update)
   const toast = useUI(s => s.toast)
@@ -492,46 +556,9 @@ function Feed({ social, byUid, tintOf, me, sharing, onChanged }) {
       Todavía no hay actividad. Terminá un entreno y compartilo 💪
     </div>}
 
-    {social.posts.map(p => {
-      const author = byUid.get(p.uid)
-      const mine = me && p.uid === me
-      const rEmoji = p.routine && !ICON_NAMES.includes(p.routine.emoji) ? p.routine.emoji : ''
-      const rname = p.routine ? [rEmoji, p.routine.name].filter(Boolean).join(' ') : ''
-      return <div className="card" key={p.id}>
-        <div className="feed-hd">
-          <span className="lrow-i" style={tintOf(p.uid)}>{author?.emoji || '💪'}</span>
-          <div className="lrow-m">
-            <div className="lrow-t">{author?.name || p.uid}</div>
-            <div className="lrow-s">{timeAgo(p.created)}{rname ? ' · ' + rname : ''}</div>
-          </div>
-          {mine && <Button size="sm" variant="ghost" onClick={() => remove(p.id)}>Borrar</Button>}
-        </div>
-        <div className="feed-stats">
-          <span><b>{p.minutes}</b> min</span>
-          {p.volumeKg > 0 && <span><b>{fmtVol(p.volumeKg, 'kg')}</b></span>}
-          <span><b>{p.sets}</b> series</span>
-        </div>
-        {p.top.length > 0 && <div className="feed-top">
-          {p.top.slice(0, 4).map(s => (
-            <div className="feed-set" key={s.id}>
-              <span className="feed-set-n">{exLabel(s.id, s.n)}</span>
-              <span className="feed-set-v">{fmtNum(s.w)} kg × {s.r}</span>
-            </div>
-          ))}
-          {p.top.length > 4 && <div className="dim small" style={{ marginTop: 2 }}>+{p.top.length - 4} más</div>}
-        </div>}
-        {p.prs.length > 0 && <div className="small" style={{ color: 'var(--acc)', marginTop: 8 }}>
-          🎯 {p.prs.length} PR{p.prs.length > 1 ? 's' : ''}: {p.prs.slice(0, 3).map(id => exLabel(id)).join(' · ')}{p.prs.length > 3 ? ' …' : ''}
-        </div>}
-        <div className="rx-row">
-          {RX.map(e => (
-            <button key={e} className={'rx' + (p.mine === e ? ' on' : '')} onClick={() => act('/api/social/react', { id: p.id, emoji: e })}>
-              {e}{p.counts[e] ? ' ' + p.counts[e] : ''}
-            </button>
-          ))}
-        </div>
-      </div>
-    })}
+    {social.posts.map(p => <PostCard key={p.id} p={p} byUid={byUid} tintOf={tintOf} me={me} body={body}
+      onReact={emoji => act('/api/social/react', { id: p.id, emoji })}
+      onRemove={() => remove(p.id)} />)}
     {err && <div className="dim small" style={{ textAlign: 'center', marginTop: 6 }}>{err}</div>}
   </>
 }
@@ -615,52 +642,6 @@ function Routines({ social, byUid, tintOf, me, S, update, onChanged, sharing }) 
 }
 
 /* ============================ datos derivados de la vista ============================ */
-
-/** Territorios: dueño de cada músculo = mejor ×peso promedio **entre los ejercicios que lo
- *  trabajan directo** (peso ≥ 0.5 en `musclesOf`); si nadie lo hace directo, cae al pozo de
- *  los secundarios y se marca `direct:false`. Con menos de dos contendientes, el músculo queda
- *  gris. Se calcula acá porque el mapeo ejercicio→músculos vive en las librerías del frontend. */
-function territoryOf(data) {
-  const byUid = new Map(data.participants.map(p => [p.uid, p]))
-  const bySlug = new Map()
-  for (const ex of data.exercises) {
-    const e = exOr(ex.id)
-    if (!e) continue
-    const weights = musclesOf(e)
-    for (const slug of muscleGroupsOf(e)) {
-      let m = bySlug.get(slug)
-      if (!m) { m = { all: new Map(), primary: new Map() }; bySlug.set(slug, m) }
-      const direct = (weights[slug] || 0) >= 0.5
-      const bump = (map, en) => {
-        const cur = map.get(en.uid) || { sum: 0, n: 0, best: 0, d: null }
-        cur.sum += en.rel; cur.n++
-        if (en.rel > cur.best) { cur.best = en.rel; cur.d = en.d }
-        map.set(en.uid, cur)
-      }
-      for (const en of ex.entries) {
-        if (en.rel == null) continue
-        bump(m.all, en)
-        if (direct) bump(m.primary, en)
-      }
-    }
-  }
-  const owners = {}
-  for (const [slug, m] of bySlug) {
-    const toList = map => [...map.entries()].map(([uid, v]) => ({ uid, avg: v.sum / v.n, best: v.best, d: v.d }))
-    const listAll = toList(m.all)
-    if (listAll.length < 2) continue
-    const listPrimary = toList(m.primary)
-    const pool = (listPrimary.length ? listPrimary : listAll).sort((a, b) => b.avg - a.avg || b.best - a.best)
-    const w = pool[0]
-    const p = byUid.get(w.uid)
-    owners[slug] = {
-      uid: w.uid, name: p?.name || w.uid, color: ACCENTS[p?.color] || 'var(--label-3)',
-      avg: Math.round(w.avg * 100) / 100, d: w.d, recent: !!(w.d && w.d >= data.week.start),
-      direct: listPrimary.length > 0,
-    }
-  }
-  return { owners, list: MUSCLES.filter(s => owners[s]).map(s => ({ slug: s, ...owners[s] })) }
-}
 
 /** Premios semanales + campeón de la semana pasada (todo sale de datos que ya viajan). */
 function prizesOf(data) {
