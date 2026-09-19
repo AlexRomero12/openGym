@@ -137,6 +137,9 @@ button,.chip,.tile,.item,.wday,.cal-d,.swatch,.hm-c,.lrow,.seg button,.stp butto
   fill:none;stroke:currentColor;stroke-width:var(--icon-stroke);
   stroke-linecap:round;stroke-linejoin:round;
 }
+/* An Icon inside a line of text (routine glyph next to its name). .icn is display:block, so
+   the wrapper is what sits on the text baseline. */
+.glyph-i{display:inline-flex;vertical-align:-.14em;margin-right:4px}
 
 @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
 

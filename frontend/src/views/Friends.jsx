@@ -10,7 +10,7 @@ import { Button, Segmented, Switch } from '../components/ui.jsx'
 import LineChart from '../components/LineChart.jsx'
 import { MiniBodyMap } from '../components/BodyMap.jsx'
 import TerritoryMap, { MUSCLE_ES } from '../components/TerritoryMap.jsx'
-import Icon, { ICON_NAMES } from '../components/Icon.jsx'
+import Icon from '../components/Icon.jsx'
 import { glyphOf } from '../lib/glyphs.js'
 import { postMuscles } from '../lib/feed-activity.js'
 import { mergePlan } from '../lib/plan-share.js'
@@ -462,8 +462,6 @@ function PostCard({ p, byUid, tintOf, me, body, onReact, onRemove }) {
   const [openTop, setOpenTop] = useState(false)
   const author = byUid.get(p.uid)
   const mine = me && p.uid === me
-  const rEmoji = p.routine && !ICON_NAMES.includes(p.routine.emoji) ? p.routine.emoji : ''
-  const rname = p.routine ? [rEmoji, p.routine.name].filter(Boolean).join(' ') : ''
   const { load, estimated } = postMuscles(p)
   const chips = Object.entries(load).sort((a, b) => b[1] - a[1])
   // La tarjeta muestra 4 destacados; el resto (hasta 20) sale al tocar «+N más».
@@ -474,7 +472,10 @@ function PostCard({ p, byUid, tintOf, me, body, onReact, onRemove }) {
       <span className="lrow-i" style={tintOf(p.uid)}>{author?.emoji || '💪'}</span>
       <div className="lrow-m">
         <div className="lrow-t">{author?.name || p.uid}</div>
-        <div className="lrow-s">{timeAgo(p.created)}{rname ? ' · ' + rname : ''}</div>
+        <div className="lrow-s">
+          {timeAgo(p.created)}
+          {p.routine && <> · <span className="glyph-i"><Icon name={glyphOf(p.routine.emoji)} /></span>{p.routine.name}</>}
+        </div>
       </div>
       {mine && <Button size="sm" variant="ghost" onClick={onRemove}>Borrar</Button>}
     </div>

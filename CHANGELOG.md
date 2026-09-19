@@ -86,6 +86,11 @@ indica aparte (la traducción se propone en el **PR #245**).
   vacío); aviso del mapa de territorios cuando no hay 2+ personas; tabla de historial con scroll
   horizontal; fila de progresión 2×2 en teléfonos; íconos de rutina (glyph keys como
   `figureStrength`) renderizados como iconos en Rutinas y en el feed.
+- 🧭 **`figureStrength` deja de salir como texto.** Los lugares que mostraban el valor crudo de
+  `routine.emoji` ahora pasan por `glyphOf`: los selectores de rutina del Entrenador (el `Row`
+  lleva el glyph real), las pestañas y el encabezado de la tarjeta de plan en el chat, y el nombre
+  de la rutina en cada publicación del feed (`.glyph-i` para que el icono quede sobre la línea de
+  texto). `lib/glyphs.js` suma test: claves válidas, emoji legado multi-código y fallback.
 - 🔤 **Nombres de ejercicios en tipo oración** («Remo en polea sentado»): se centralizó en
   `exerciseNameFor` (`sentenceCase`, solo la primera letra) y se quitó el `text-transform:
   capitalize` de todas las vistas (Entrenar, Plan, Biblioteca, Stats, historial, PRs, toasts y

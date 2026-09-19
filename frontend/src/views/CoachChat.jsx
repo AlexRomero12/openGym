@@ -33,6 +33,7 @@ import { nextPrescription } from '../lib/progression.js'
 import { useCoachStatus, requestReview, requestDebrief, requestPlan, refinePlan, requestAsk, requestLoads, resolvePending, cohortStats, setCohortShare, jobErrorText, coachAccount } from '../lib/coach-api.js'
 import { confirmSheet, exercisePicker } from '../sheets.jsx'
 import Icon from '../components/Icon.jsx'
+import { glyphOf } from '../lib/glyphs.js'
 import RichText from '../components/RichText.jsx'
 import AskSheet from '../components/AskSheet.jsx'
 import LineChart from '../components/LineChart.jsx'
@@ -166,7 +167,7 @@ export default function CoachChat() {
   const pickRoutineLoads = () => openSheet(close => <div className="chat-menu">
     <h3>{t('Weights for which routine?')}</h3>
     <div className="sect-b">
-      {(S.routines || []).map(r => <Row key={r.id} icon="dumbbell" iconTint="var(--acc)" title={`${r.emoji || ''} ${r.name}`.trim()} subtitle={t('{0} exercises', (r.ex || []).length)} accessory="chevron" onClick={() => { close(); ask(() => requestLoads([r.id]), t('What should I load for “{0}”?', r.name)) }} />)}
+      {(S.routines || []).map(r => <Row key={r.id} icon={glyphOf(r.emoji)} iconTint="var(--acc)" title={r.name} subtitle={t('{0} exercises', (r.ex || []).length)} accessory="chevron" onClick={() => { close(); ask(() => requestLoads([r.id]), t('What should I load for “{0}”?', r.name)) }} />)}
       {!(S.routines || []).length && <div className="chat-empty">{t('You have no routines yet — ask the Coach for a plan first.')}</div>}
     </div>
     <div style={{ height: 10 }} />
@@ -175,7 +176,7 @@ export default function CoachChat() {
   const pickRoutine = () => openSheet(close => <div className="chat-menu">
     <h3>{t('Improve which routine?')}</h3>
     <div className="sect-b">
-      {(S.routines || []).map(r => <Row key={r.id} icon="dumbbell" iconTint="var(--acc)" title={`${r.emoji || ''} ${r.name}`.trim()} subtitle={t('{0} exercises', (r.ex || []).length)} accessory="chevron" onClick={() => { close(); askImprove(r) }} />)}
+      {(S.routines || []).map(r => <Row key={r.id} icon={glyphOf(r.emoji)} iconTint="var(--acc)" title={r.name} subtitle={t('{0} exercises', (r.ex || []).length)} accessory="chevron" onClick={() => { close(); askImprove(r) }} />)}
       {!(S.routines || []).length && <div className="chat-empty">{t('You have no routines yet — ask the Coach for a plan first.')}</div>}
     </div>
     <div style={{ height: 10 }} />
@@ -400,7 +401,7 @@ function PlanCard({ p, S, update, toast, nav, refresh }) {
       <WeekStrip days={weekDays} />
 
       {b.routines.length > 1 && <div className="pcard-tabs">
-        {b.routines.map((x, i) => <button key={x.id || i} className={'pcard-tab' + (i === tab ? ' on' : '')} onClick={() => setTab(i)}>{x.emoji} {x.name}</button>)}
+        {b.routines.map((x, i) => <button key={x.id || i} className={'pcard-tab' + (i === tab ? ' on' : '')} onClick={() => setTab(i)}><span className="glyph-i"><Icon name={glyphOf(x.emoji)} /></span>{x.name}</button>)}
       </div>}
 
       {r && <RoutineBlock r={r} unit={S.unit} />}
@@ -425,7 +426,7 @@ const WeekStrip = ({ days }) => <div className="pcard-week">
 </div>
 
 const RoutineBlock = ({ r, unit }) => <div className="pcard-rt">
-  <div className="pcard-rt-h"><b>{r.emoji} {r.name}</b><span>{t('{0} exercises', r.ex.length)}</span></div>
+  <div className="pcard-rt-h"><b><span className="glyph-i"><Icon name={glyphOf(r.emoji)} /></span>{r.name}</b><span>{t('{0} exercises', r.ex.length)}</span></div>
   {!!r.why && <RichText className="pcard-why" text={r.why} />}
   {r.ex.map((e, i) => <div key={i} className="pcard-ex">
     <div className="pcard-ex-r"><span className="pcard-ex-n">{exName(e.id)}</span><span className="pcard-ex-l">{exLine(e, unit)}</span></div>
@@ -881,7 +882,7 @@ function ProposalDetail({ entry, S }) {
     {kind === 'create' && b && <>
       <WeekStrip days={weekDays} />
       {b.routines.length > 1 && <div className="pcard-tabs" style={{ paddingLeft: 0, paddingRight: 0 }}>
-        {b.routines.map((x, i) => <button key={x.id || i} className={'pcard-tab' + (i === tab ? ' on' : '')} onClick={() => setTab(i)}>{x.emoji} {x.name}</button>)}
+        {b.routines.map((x, i) => <button key={x.id || i} className={'pcard-tab' + (i === tab ? ' on' : '')} onClick={() => setTab(i)}><span className="glyph-i"><Icon name={glyphOf(x.emoji)} /></span>{x.name}</button>)}
       </div>}
       {r && <RoutineBlock r={r} unit={S.unit} />}
       <p className="pcard-sum" style={{ fontSize: 13 }}>{entry.scheduled ? t('Your week was set to this schedule.') : t('Imported without changing your week.')}</p>
