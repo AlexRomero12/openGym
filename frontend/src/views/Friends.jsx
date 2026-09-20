@@ -267,7 +267,10 @@ export default function Friends() {
             {ex.entries.map(e => {
               const p = byUid.get(e.uid)
               const key = norm === 'rel' ? 'rel' : 'est'
-              const pts = (e.series || []).filter(s => s[key] != null).map(s => ({ t: Date.parse(s.w + 'T12:00:00'), y: s[key], d: s.w }))
+              const pts = (e.series || []).filter(s => s[key] != null).map(s => {
+                const d = s.d || s.w   // fecha real de la marca; `w` (lunes) es solo el respaldo
+                return { t: Date.parse(d + 'T12:00:00'), y: s[key], d }
+              })
               return <div key={e.uid}>
                 <div className="fx-prog-h">
                   <span className="fx-dot" style={{ background: colorOf(e.uid) }} />

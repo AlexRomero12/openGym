@@ -69,3 +69,13 @@ test('los calentamientos no cuentan para la semana', () => {
   const out = rank(a, state([]))
   assert.equal(out.weekExercises[0].entries[0].rel, 0.9)   // 70 / 80
 })
+
+test('la serie semanal fecha el punto con la sesión real, no con el lunes de la semana', () => {
+  const a = state([workout('2026-09-16', [{ id: '0043', ...sets([100, 5]) }])])   // miércoles
+  const b = state([workout('2026-09-18', [{ id: '0043', ...sets([50, 5]) }])])    // viernes
+  const out = rank(a, b)
+  const point = uid => out.exercises.find(e => e.id === '0043').entries
+    .find(e => e.uid === uid).series.find(s => s.est != null)
+  assert.deepEqual([point('a').w, point('a').d], ['2026-09-14', '2026-09-16'])
+  assert.deepEqual([point('b').w, point('b').d], ['2026-09-14', '2026-09-18'])
+})

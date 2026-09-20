@@ -393,6 +393,9 @@ export function buildRanking({ users, states }, config, now = new Date(), norm =
         const bwWk = b ? bwAt(p._bw, weeks[i].end) : null
         series.push({
           w: weeks[i].start,
+          // Fecha real del mejor set de esa semana (el punto agrega la semana, pero se muestra
+          // como una sesión: sin esto el tooltip fechaba la marca el lunes, no el día entrenado).
+          d: b ? b.d : null,
           est: estWkKg == null ? null : display(estWkKg),
           rel: estWkKg != null && bwWk ? round1(estWkKg / bwWk) : null,
         })
