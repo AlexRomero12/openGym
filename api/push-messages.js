@@ -27,6 +27,23 @@ const COPY = {
 
 const copyFor = lang => COPY[lang] || COPY.en;
 
+/* Since the routine redesign `r.emoji` holds an icon key — 'figureStrength',
+   'dumbbell' — that the app draws as an SVG glyph. A notification is plain text, so
+   the key is swapped for the emoji it describes; a key with no emoji stays out of
+   the title instead of arriving as words ("figureStrength Día A · Empuje hoy").
+   A literal emoji from pre-redesign data passes through untouched. */
+const GLYPH_EMOJI = {
+  figureStrength: '🏋️', arm: '💪', legs: '🦵', pullup: '🧗',
+  dumbbell: '🏋️', barbell: '🏋️', kettlebell: '🦍', machine: '🤖',
+  figureRun: '🏃', bike: '🚴', swim: '🏊', boxing: '🥊', timer: '⏱️',
+  stretch: '🤸', moon: '🌙', heart: '❤️', flame: '🔥', bolt: '⚡',
+  target: '🎯', trophy: '🏆', medal: '🥇', star: '⭐', crown: '👑', shield: '🛡️',
+};
+const routineMark = emoji =>
+  !emoji ? ''
+    : /\p{Extended_Pictographic}/u.test(emoji) ? emoji
+    : GLYPH_EMOJI[emoji] || '';
+
 export function restTimerPush(lang) {
   const copy = copyFor(lang);
   return { title: copy.restTitle, body: copy.restBody, tag: 'rest-timer' };
@@ -38,9 +55,10 @@ export function testPush(lang) {
 
 export function dayReminderPush(lang, routine) {
   const copy = copyFor(lang);
+  const mark = routineMark(routine && routine.emoji);
   return {
     title: routine
-      ? `${routine.emoji || '🏋️'} ${routine.name} ${copy.dayRoutineSuffix}`
+      ? `${mark ? `${mark} ` : ''}${routine.name} ${copy.dayRoutineSuffix}`
       : copy.dayFallbackTitle,
     body: copy.dayBody,
     tag: 'day-reminder',

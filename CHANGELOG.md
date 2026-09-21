@@ -102,6 +102,12 @@ indica aparte (la traducción se propone en el **PR #245**).
   actual** y muestra el contador `· N×`.
 - 🔔 **Notificaciones push en español** (descanso, recordatorio de entreno y test), con el idioma
   del perfil; test propio en `api/push-messages.test.js` (3/3).
+- 🔔 **El recordatorio del día ya no manda el icono como texto (21/sep).** Desde el rediseño
+  `r.emoji` guarda una clave de icono (`figureStrength`, …) en vez de un emoji, y
+  `dayReminderPush` la concatenaba tal cual al título: el teléfono recibía «figureStrength Día A ·
+  Empuje hoy». Las claves se traducen al emoji que describen (`GLYPH_EMOJI` en
+  `api/push-messages.js`, 24 entradas), un emoji legado pre-rediseño pasa tal cual y una clave sin
+  emoji se omite — nunca llega como palabras. Tests: `api/push-messages.test.js` (4/4).
 - 📦 **Build.** `api/Dockerfile` copia `friends.js` y `social.js`; la instancia corre con
   `docker compose up -d --build` (**nunca** `pull`: pisaría la feature local).
 - 🧠 **Entrenador IA por perfil (cuenta propia).** El admin elige en **Admin → AI Coach → «Whose

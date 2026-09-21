@@ -43,3 +43,19 @@ test('localizes every server-generated notification in es', () => {
     tag: 'day-reminder',
   });
 });
+
+test('turns a routine icon key into an emoji instead of sending it as words', () => {
+  // The redesign stores icon keys ('figureStrength', …) — they must never reach the
+  // notification as text.
+  assert.equal(
+    dayReminderPush('es', { name: 'Día A · Empuje', emoji: 'figureStrength' }).title,
+    '🏋️ Día A · Empuje hoy'
+  );
+  // A key with no emoji behind it drops the mark, it does not arrive as words.
+  assert.equal(
+    dayReminderPush('es', { name: 'Nueva rutina', emoji: 'someNewGlyph' }).title,
+    'Nueva rutina hoy'
+  );
+  // No emoji at all: same shape, no leftover mark.
+  assert.equal(dayReminderPush('es', { name: 'Nueva rutina', emoji: '' }).title, 'Nueva rutina hoy');
+});
