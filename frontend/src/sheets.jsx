@@ -6,7 +6,7 @@ import { isWarmup, warmupOrder, warmupMatches, warmupOf, warmupSections } from '
 import { activeProfile, exAvailable, ALL_EQUIPMENT, newProfile } from './lib/equipment.js'
 import { fmtDate, fmtNum, fmtVol, fmtDur, durPart, todayISO, isoOf, uid, exCount, DAYN, DAYS, weekOrder, weekStartOf, weekDayOffset, MONTHS_LONG, ACCENTS } from './lib/format.js'
 import { lastEntryFor, bestWeightFor, bestWeightForEntry, buildSets, effectiveRoutineIds, workoutVolume, setsDone, setsDoneActive, setUnitsTotal, lastBW, supersetUnits, unitOf, setLabel, defaultConfig, cleanupSg, modeOf, effortOf, EFFORT, capEffort, stepEffort, isBw, isPerSide, sideReps, workSetsDone, applyIntensifierPlan, warmupFloorBase, MAX_PLANNED_WARMUPS, NOTE_MAX } from './lib/history.js'
-import { usesBar, barWeightFor, defaultBarWeight, hasBarOverride } from './lib/bar.js'
+import { usesBar, usesMinWeight, barWeightFor, defaultBarWeight, hasBarOverride } from './lib/bar.js'
 import { toScale, rirOf, EFFORT_PRESETS, effortColor } from './lib/effort.js'
 import { beep, vibrate } from './lib/sound.js'
 import { t, dateLocale, instrFor, exerciseNameFor, getLang, INSTR_LANGS } from './lib/i18n.js'
@@ -38,6 +38,7 @@ import { useSheetKeyboard, useRevealActiveChip, tappable } from './lib/use-sheet
 import { isFav, toggleFav, sortFavouritesFirst } from './lib/favourites.js'
 import { buildSessionEntries } from './lib/session-start.js'
 import { buildCombinedEntries, deriveSessionName } from './lib/session-merge.js'
+import { SITES, lastFor, upsertMeasurement, lengthUnit } from './lib/measurements.js'
 import { prefillFor, clearPrefill } from './lib/prefill.js'
 import { workoutsOn, backfillStart, backfillEnd, completeBackfill } from './lib/backfill.js'
 
@@ -61,9 +62,10 @@ function ConfirmDialog({ title, message, confirmText, cancelText, danger, onConf
 // out). The profile is the truth — settings and plan come from the server either way — the
 // question is only whether these entries are added to it or dropped. Resolves true to add.
 export function askAddDeviceData(extras) {
+  const measures = extras.measurements ? ' ' + t('{0} body measurements were logged too.', extras.measurements) : ''
   return new Promise(resolve => confirmSheet({
     title: t('Add this device\'s workouts to your profile?'),
-    message: t('{0} workouts and {1} weigh-ins were logged on this device while signed out. Add them to your profile, or keep the profile exactly as it is on the server.', extras.workouts, extras.bodyweight),
+    message: t('{0} workouts and {1} weigh-ins were logged on this device while signed out. Add them to your profile, or keep the profile exactly as it is on the server.', extras.workouts, extras.bodyweight) + measures,
     confirmText: t('Add them'), cancelText: t('Keep profile as is'),
     onConfirm: () => resolve(true), onCancel: () => resolve(false), locked: true
   }))
@@ -248,6 +250,49 @@ function BwSheet({ required, onDone, close }) {
 export function bwSheet(opts = {}) {
   const h = ui().openSheet(close => <BwSheet {...opts} close={close} />, { locked: !!opts.required })
   return h
+}
+
+/* ============================ body measurements ============================ */
+// One sheet for all four sites: a stepper each, prefilled with the last reading so a re-measure is
+// a nudge rather than a retype. Leaving one at 0 simply does not log it (lib/measurements.js), so
+// a day can carry just the sites you had a tape for.
+function MeasureSheet({ close }) {
+  const st = useStore(s => s.S)
+  const lu = lengthUnit(st.unit)
+  const [v, setV] = useState(() => Object.fromEntries(SITES.map(s => [s.key, lastFor(st, s.key)?.y ?? 0])))
+  const set = (k, n) => setV(x => ({ ...x, [k]: n }))
+  const save = () => {
+    update(s => { s.measurements = upsertMeasurement(s, todayISO(), v) })
+    close()
+    toast(t('Measurements saved'))
+  }
+  const recent = [...(st.measurements || [])].reverse().slice(0, 4)
+  const delEntry = d => update(s => { s.measurements = s.measurements.filter(e => e.d !== d) })
+  return <>
+    <h3>{t('Log body measurements')}</h3>
+    <div className="muted small" style={{ marginBottom: 12 }}>{t('Today') + ', ' + fmtDate(todayISO(), true)}</div>
+    <div className="grid2">
+      {SITES.map(s => <Stepper key={s.key} label={t(s.label)} unit={lu} step={0.5}
+        value={v[s.key]} onChange={n => set(s.key, n)} />)}
+    </div>
+    <div style={{ height: 14 }} />
+    <Button variant="primary" onClick={save}>{t('Save')}</Button>
+    {recent.length > 0 && <>
+      <h4 className="sec">{t('Recent measurements')}</h4>
+      <div className="list" style={{ gap: 0 }}>
+        {recent.map(e => <div key={e.d} className="row between" style={{ padding: '9px 2px', borderBottom: '1px solid var(--sep)' }}>
+          <span className="small muted">{fmtDate(e.d, true)}</span>
+          <span className="row" style={{ gap: 10 }}>
+            <span className="small">{SITES.filter(s => e.m?.[s.key] > 0).map(s => t(s.label) + ' ' + fmtNum(e.m[s.key])).join(' · ')} {lu}</span>
+            <button className="iconbtn" style={{ width: 32, height: 30, borderRadius: 8, fontSize: 15, color: 'var(--red)' }} onClick={() => delEntry(e.d)} aria-label="delete"><Icon name="trash" /></button>
+          </span>
+        </div>)}
+      </div>
+    </>}
+  </>
+}
+export function measureSheet() {
+  ui().openSheet(close => <MeasureSheet close={close} />)
 }
 
 /* ============================ import from another app ============================ */
@@ -569,15 +614,17 @@ function GoalSheet({ close }) {
 }
 export const goalSheet = () => ui().openSheet(close => <GoalSheet close={close} />)
 
-/* ============================ bar weight ============================ */
-// One editor for every place the bar weight shows up (exercise detail, exercise config,
-// mid-workout sheet): a stepper over the effective value. What it saves is per exercise
-// and lives in S.barWeights, in the profile unit (see lib/bar.js) — stepping or typing
-// down to 0 clears the override and the field falls back to the default for the bar
-// type, the same "0 drops the key" shape a nullable set field has.
+/* ============================ bar / minimum weight ============================ */
+// One editor for every place the bar's — or a machine's — lightest load shows up (exercise
+// detail, exercise config, mid-workout sheet): a stepper over the effective value. What it
+// saves is per exercise and lives in S.barWeights, in the profile unit (see lib/bar.js) —
+// stepping or typing down to 0 clears the override. For a bar it falls back to the default
+// for the bar type; for a machine it falls back to a third of your work weight (the warm-up
+// ramp's derived floor). Same "0 drops the key" shape a nullable set field has.
 function BarWeightEditor({ ex, extra }) {
   const st = useStore(s => s.S)
   const explicit = hasBarOverride(st, ex.id)
+  const bar = usesBar(ex)
   const def = defaultBarWeight(ex.eq, st.unit)
   const setBar = v => update(s => {
     s.barWeights = s.barWeights || {}
@@ -586,10 +633,12 @@ function BarWeightEditor({ ex, extra }) {
   })
   return <>
     <div className="row cfgrow" style={{ marginBottom: 6 }}>
-      <Stepper label={t('Bar ({0})', st.unit)} value={barWeightFor(st, ex) || 0} step={2.5} onChange={setBar} />
+      <Stepper label={bar ? t('Bar ({0})', st.unit) : t('Weight ({0})', st.unit)} value={barWeightFor(st, ex) || 0} step={2.5} onChange={setBar} />
     </div>
     <div className="small dim" style={{ marginBottom: 18 }}>
-      {explicit ? t('Set to 0 to go back to the default ({0}).', fmtNum(def) + ' ' + st.unit) : t('Default for this bar type.')}
+      {bar
+        ? (explicit ? t('Set to 0 to go back to the default ({0}).', fmtNum(def) + ' ' + st.unit) : t('Default for this bar type.'))
+        : t('The empty machine — leave at 0 to start warm-ups at a third of your work weight.')}
       {extra ? ' ' + extra : ''}
     </div>
   </>
@@ -669,9 +718,9 @@ function ExerciseDetail({ ex, close }) {
       <Button icon="pencil" style={{ flex: 1 }} onClick={() => { close(); customExSheet(ex) }}>{t('Edit')}</Button>
       <Button variant="danger" icon="trash" style={{ flex: 1 }} onClick={() => deleteCustomEx(ex, close)}>{t('Delete')}</Button>
     </div>}
-    {usesBar(ex) && <>
-      <h4 className="sec">{t('Bar weight')}</h4>
-      <BarWeightEditor ex={ex} extra={t('You still log the total weight — the bar only feeds the per-side plate math.')} />
+    {(usesMinWeight(ex) || hasBarOverride(st, ex.id)) && <>
+      <h4 className="sec">{usesBar(ex) ? t('Bar weight') : t('Minimum weight')}</h4>
+      <BarWeightEditor ex={ex} extra={usesBar(ex) ? t('You still log the total weight — the bar only feeds the per-side plate math.') : undefined} />
     </>}
     {!isCardio(ex) && <OneRM ex={ex} />}
     {instrFor(ex).length > 0 &&<><h4 className="sec">{t('How to')}{!INSTR_LANGS.includes(getLang()) && <span className="dim" style={{ textTransform: 'none', letterSpacing: 0 }}> · {t('instructions in English')}</span>}</h4><ol className="steps-list">{instrFor(ex).map((s, i) => <li key={i}>{s}</li>)}</ol></>}
@@ -1390,8 +1439,8 @@ function ExConfig({ ex, existing, onSave, onDelete, close, routine, initial }) {
     </>}
     {/* The bar's own weight, for the plate math — per exercise, not per plan, so it sits
         apart from the config fields above and writes straight to S.barWeights. */}
-    {usesBar(ex) && <>
-      <h4 className="sec">{t('Bar weight')}</h4>
+    {(usesMinWeight(ex) || hasBarOverride(st, ex.id)) && <>
+      <h4 className="sec">{usesBar(ex) ? t('Bar weight') : t('Minimum weight')}</h4>
       <BarWeightEditor ex={ex} extra={t('Applies to this exercise everywhere, not just this plan.')} />
     </>}
     <ProgressionFields ex={ex} mode={mode} c={c} setC={setC} routine={routine} unit={st.unit} perSide={perSide} />

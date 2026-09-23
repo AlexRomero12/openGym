@@ -26,6 +26,15 @@ const exOf = exOrId => (typeof exOrId === 'string' ? EXIDX[exOrId] : exOrId)
 /** Whether this exercise (object or id) is done with a bar. */
 export const usesBar = exOrId => BAR_EQ.has(exOf(exOrId)?.eq)
 
+/** Equipment whose lightest load is not zero: a bar (the bar itself) or a machine/sled stack.
+ *  Cables are left out — their stacks start at or near zero — and a bodyweight movement has no
+ *  load to floor at all. Used to offer the "minimum weight" editor and to floor the warm-up ramp. */
+const MIN_EQ = /machine|lever|sled/
+export const usesMinWeight = exOrId => {
+  const ex = exOf(exOrId)
+  return !!ex && (BAR_EQ.has(ex.eq) || MIN_EQ.test(ex.eq || ''))
+}
+
 /** The default bar weight for an equipment type, in the given unit. null off the list. */
 export const defaultBarWeight = (eq, unit) =>
   (unit === 'lb' ? DEFAULT_BAR_LB : DEFAULT_BAR_KG)[eq] ?? null

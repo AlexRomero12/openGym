@@ -5,6 +5,22 @@
 Trabajo propio de este fork sobre v1.3.7. Nada de esto va al repo original salvo lo que se
 indica aparte (la traducción se propone en el **PR #245**).
 
+- 🏋️ **Peso mínimo por ejercicio, y la rampa arranca ahí (23/sep).** Un mínimo **editable por
+  ejercicio** (barra o máquina — la sentadilla hack vacía pesa 47 kg) que la rampa de aproximación
+  usa como piso y **ancla su grilla de carga** (47 → 52 → 57…), en vez de asumir que todo empieza en
+  0. Así la rampa no pide pesos que tu máquina no puede cargar. Además, la rampa **ya no colapsa**
+  cuando el piso es alto: un RDL de 30 kg desde barra de 20 da 20 y 25 aunque pidas 2–3
+  aproximaciones. Editor **«Peso mínimo»** en la config y el detalle del ejercicio para máquinas
+  (`usesMinWeight`, `lib/bar.js`), guardado en `S.barWeights`; el peso de barra de siempre se edita
+  igual. Tests: `lib/warmup-ramp.test.js`.
+- 📏 **Medidas corporales — cintura, pecho, brazo, muslo.** Tarjeta propia en Stats
+  (`lib/measurements.js`) con una curva por sitio y el delta vs la medición anterior; hoja de
+  registro con un stepper por sitio, prellenada con la última lectura. Una entrada por día y sitios
+  opcionales (un día con solo cintura es válido), en la unidad de longitud del perfil (cm en kg, in
+  en lb) que se convierte al cambiar de unidad. Sincroniza y se respalda como el peso corporal:
+  `mergeMeasurements` une los sitios por día (gana el editado más tarde, por sitio) y el aviso de
+  «datos sin sesión» del sign-in también cuenta las medidas. Icono `ruler`. Tests:
+  `lib/measurements.test.js`, `lib/sync-merge.test.js`, `lib/units.test.js`.
 - 🔥 **Series de aproximación dinámicas y cargables (23/sep).** El número sigue siendo por ejercicio
   (stepper «Warm-up sets», 0–5), pero los pesos ya no son un 50/75/87,5 fijo del trabajo: la rampa
   **arranca en la barra vacía** (o en un primer paso ligero si el ejercicio no tiene barra) y cada

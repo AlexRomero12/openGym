@@ -3,6 +3,7 @@
 // can load: lb to the nearest 0.5, kg to the nearest 0.25 — enough that a value converted there
 // and back lands where it started for any plate-loadable number.
 import { isSideSet, syncSideAggregate } from './workout-model.js'
+import { convertLength, lengthUnit } from './measurements.js'
 
 const LB_PER_KG = 2.2046226218
 
@@ -47,8 +48,14 @@ export function convertStateUnit(S, to) {
   const from = S.unit || 'kg'
   if (from === to) return S
   const c = v => convertWeight(v, from, to)
+  const cLen = v => convertLength(v, lengthUnit(from), lengthUnit(to))
   const out = { ...S, unit: to }
   if (Array.isArray(S.bodyweight)) out.bodyweight = S.bodyweight.map(b => ({ ...b, w: c(b.w) }))
+  // Body measurements are lengths, not loads: they follow the profile's tape unit (cm↔in) rather
+  // than its plate unit, and convert on the same switch.
+  if (Array.isArray(S.measurements)) out.measurements = S.measurements.map(e => ({
+    ...e, m: Object.fromEntries(Object.entries(e?.m || {}).map(([k, v]) => [k, cLen(v)])),
+  }))
   if (S.targetW != null) out.targetW = c(S.targetW)
   if (S.exWeights) out.exWeights = Object.fromEntries(Object.entries(S.exWeights).map(([k, v]) => [k, v && typeof v === 'object' ? { ...v, w: c(v.w) } : c(v)]))
   // A Coach load confirmed for an upcoming session is a weight like any other; leaving it in

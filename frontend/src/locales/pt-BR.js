@@ -4,6 +4,8 @@
 import pt from './pt.js'
 
 export const PT_BR_OVERRIDES = {
+  'Minimum weight': 'Peso mínimo',
+  'The empty machine — leave at 0 to start warm-ups at a third of your work weight.': 'A máquina vazia — deixe em 0 para começar as aproximações a um terço do seu peso de trabalho.',
   '{0} workouts and {1} weigh-ins were logged on this device while signed out. Add them to your profile, or keep the profile exactly as it is on the server.': '{0} treinos e {1} pesagens foram registrados neste dispositivo sem login. Adicione-os ao seu perfil ou mantenha o perfil exatamente como está no servidor.',
   'Add this device\'s workouts to your profile?': 'Adicionar os treinos deste dispositivo ao seu perfil?',
   'Offline — your changes are saved on this device and sync when you are back online.': 'Offline — suas alterações ficam salvas neste dispositivo e sincronizam assim que você voltar a ficar online.',
@@ -27,6 +29,15 @@ export const PT_BR_OVERRIDES = {
   'Start without weighing in': 'Iniciar sem se pesar',
   'Choose a different workout': 'Escolher outro treino',
   'Recent weigh-ins': 'Pesagens recentes',
+  'Body measurements': 'Medidas corporais',
+  'Log body measurements': 'Registrar medidas corporais',
+  'Waist': 'Cintura',
+  'Arm': 'Braço',
+  'Thigh': 'Coxa',
+  'Measurements saved': 'Medidas salvas',
+  'Recent measurements': 'Medidas recentes',
+  'No measurements yet — log them here to start the curve.': 'Ainda não há medidas — registre-as aqui para começar a curva.',
+  '{0} body measurements were logged too.': 'Também foram registradas {0} medidas corporais.',
   'Enter a valid weight': 'Informe um peso válido',
   'Weight saved': 'Peso salvo',
   'Your goal is drawn as a line through the weight charts, and gains/losses are colored by whether they move toward it.': 'Sua meta aparece como uma linha nos gráficos de peso, e os ganhos ou perdas mudam de cor conforme você se aproxima dela.',

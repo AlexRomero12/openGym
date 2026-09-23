@@ -370,8 +370,9 @@ export function buildSets(S, cfg, options = {}) {
   if (firstWork === -1) return rows
   const work = rows[firstWork]
   const step = options.step > 0 ? options.step : 2.5
-  const floor = resolveFloor(warmupFloorBase(S, cfg), work.w, step)
-  const weights = warmupWeights(work.w, warm, floor, step)
+  const floorBase = warmupFloorBase(S, cfg)
+  const floor = resolveFloor(floorBase, work.w, step)
+  const weights = warmupWeights(work.w, warm, floor, step, floorBase != null)
   if (!weights.length) return rows
   return [...warmupRows(mode, work, weights), ...rows]
 }
@@ -384,6 +385,10 @@ export function buildSets(S, cfg, options = {}) {
  */
 export function warmupFloorBase(S, cfg) {
   if (isBw(cfg)) return 0
+  // An explicit per-exercise minimum wins over the equipment default: a hack-squat carriage that
+  // weighs 47 kg has no load below it, even though the app files it as a machine with no bar.
+  const own = Number((S && S.barWeights && S.barWeights[cfg && cfg.id]) || 0)
+  if (own > 0) return own
   const bar = barWeightFor(S, cfg && cfg.id)
   return bar != null ? bar : null
 }
@@ -391,12 +396,12 @@ export function warmupFloorBase(S, cfg) {
 const round1 = v => Math.round(v * 10) / 10
 const snapDown = (v, step) => (step > 0 ? Math.floor(v / step + 1e-9) * step : v)
 
-// Turn a floor base (see warmupFloorBase) into a loadable floor for this work weight: a bar or
-// bodyweight floor is fixed, a non-bar one is a third of the work weight, both rounded DOWN to
-// the step so a warm-up never lands on a load the gym cannot make.
+// Turn a floor base (see warmupFloorBase) into a loadable floor for this work weight: a real
+// equipment minimum (bar or machine) is used as-is, while a non-bar one is a third of the work
+// weight, rounded DOWN to the step so a warm-up never lands on a load the gym cannot make.
 function resolveFloor(floorBase, work, step) {
-  const raw = floorBase == null ? (Number(work) || 0) / 3 : Number(floorBase) || 0
-  return round1(snapDown(Math.max(0, raw), step))
+  if (floorBase != null) return round1(Number(floorBase) || 0)
+  return round1(snapDown((Number(work) || 0) / 3, step))
 }
 
 /**
@@ -409,19 +414,27 @@ function resolveFloor(floorBase, work, step) {
  * above the work weight: a warm-up you cannot load, or one as heavy as the work set, is not a
  * warm-up.
  */
-export function warmupWeights(work, count, floor, step) {
+export function warmupWeights(work, count, floor, step, anchored = false) {
   const w = Number(work) || 0
   const n = Math.max(0, Math.round(Number(count)) || 0)
   if (!(w > 0) || n <= 0) return []
+  // Warm-ups load on the exercise's own grid: multiples of `step` from the bar/machine minimum
+  // when there is one (a 47 kg sled with 2.5 kg plates moves 47, 52, 57…), from zero otherwise.
+  const base = anchored ? Math.max(0, Number(floor) || 0) : 0
+  const snap = v => (step > 0 ? base + Math.floor((v - base) / step + 1e-9) * step : v)
   const out = []
-  const first = round1(snapDown(Math.max(0, Math.min(floor, w)), step))
+  const first = round1(Math.max(base, snap(Math.max(base, Math.min(floor, w)))))
   // The floor is the lightest loadable set. If it is already at the work weight there is
   // nothing to ramp from — a "warm-up" at the working weight is not a warm-up.
   if (!(first < w - 1e-9)) return []
   out.push(first)
-  for (let i = 1; i < n; i++) {
-    const v = round1(snapDown(w * (1 - Math.pow(2, -i)), step))
-    const last = out.length ? out[out.length - 1] : 0
+  // Rungs close half the remaining gap to the work weight (W/2, 3W/4, 7W/8…). Any that land on
+  // or below the one before it are skipped — with a high floor (a heavy bar, a machine's own
+  // carriage) the first few collapse — and the climb continues until the block holds the
+  // requested count or the rungs reach the work weight.
+  for (let i = 1; out.length < n && i < 40; i++) {
+    const v = round1(snap(w * (1 - Math.pow(2, -i))))
+    const last = out[out.length - 1]
     if (v <= last + 1e-9) continue
     if (v >= w - 1e-9) break
     out.push(v)
@@ -673,7 +686,7 @@ export function rerampWarmups(rows, step = 2.5, floorBase = null) {
   const target = rows[firstWork].w || 0
   if (!(target > 0)) return rows
   const floor = resolveFloor(floorBase, target, step)
-  const weights = warmupWeights(target, firstWork, floor, step)
+  const weights = warmupWeights(target, firstWork, floor, step, floorBase != null)
   if (!weights.length) return rows
   const out = rows.slice()
   for (let i = 0; i < firstWork; i++) {
@@ -727,7 +740,7 @@ function nextWarmupWeight(work, target, warmRows, step, floorBase) {
   const floor = resolveFloor(floorBase, workW, step)
   const highest = warmRows.reduce((m, r) => Math.max(m, Number(r.w) || 0), 0)
   for (let n = warmRows.length + 1; n <= MAX_PLANNED_WARMUPS + 1; n++) {
-    const weights = warmupWeights(workW, n, floor, step)
+    const weights = warmupWeights(workW, n, floor, step, floorBase != null)
     const candidate = weights[weights.length - 1]
     if (candidate > highest + 1e-9 && candidate < workW - 1e-9) return candidate
   }

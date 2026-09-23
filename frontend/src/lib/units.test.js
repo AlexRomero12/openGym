@@ -23,6 +23,7 @@ describe('convertWeight', () => {
 describe('convertStateUnit', () => {
   const S = {
     unit: 'kg', targetW: 80, bodyweight: [{ d: '2026-01-01', w: 82.4, t: 1 }],
+    measurements: [{ d: '2026-01-01', t: 1, m: { waist: 80, arm: 35 } }],
     exWeights: { '0025': { w: 80, d: '2026-01-01' }, legacy: 100 }, barWeights: { '0025': 20 },
     routines: [{ id: 'r', ex: [{ id: '0025', sets: 3, reps: 5, weight: 80, inc: 2.5, warmup: [{ weight: 40, reps: 8 }] }, { id: 'plank', mode: 'time', sec: 30, inc: 5 }] }],
     workouts: [{ id: 'w', entries: [{ id: '0025', topW: 80, target: { weight: 80 }, sets: [{ w: 80, r: 5, done: true, drops: [{ w: 60, r: 5 }] }] }] }],
@@ -34,6 +35,7 @@ describe('convertStateUnit', () => {
     expect(out.unit).toBe('lb')
     expect(out.targetW).toBe(176.5)
     expect(out.bodyweight[0]).toEqual({ d: '2026-01-01', w: 181.5, t: 1 })
+    expect(out.measurements[0]).toEqual({ d: '2026-01-01', t: 1, m: { waist: 31.5, arm: 13.75 } })
     expect(out.exWeights['0025'].w).toBe(176.5)
     expect(out.exWeights.legacy).toBe(220.5)
     expect(out.barWeights['0025']).toBe(44)
@@ -45,6 +47,7 @@ describe('convertStateUnit', () => {
     expect(out.workoutView).toBe('list')
     expect(S.unit).toBe('kg')                       // the input is not mutated
     expect(S.workouts[0].entries[0].sets[0].w).toBe(80)
+    expect(S.measurements[0].m.waist).toBe(80)
   })
   it('is a no-op for the unit already in use', () => {
     expect(convertStateUnit(S, 'kg')).toBe(S)

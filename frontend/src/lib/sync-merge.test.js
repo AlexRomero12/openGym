@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { localExtras, mergeBodyweight, mergeStates, newerOf, unionById } from './sync-merge.js'
+import { localExtras, mergeBodyweight, mergeMeasurements, mergeStates, newerOf, unionById } from './sync-merge.js'
 
 const workout = (id, d = '2026-09-01', start = 1) => ({ id, d, start, entries: [] })
 const routine = (id, name = id) => ({ id, name, ex: [] })
@@ -27,6 +27,16 @@ describe('newerOf / unionById / mergeBodyweight', () => {
   it('bodyweight: one entry per day, the later-edited one, sorted', () => {
     const out = mergeBodyweight([{ d: '2026-09-02', w: 80, t: 5 }], [{ d: '2026-09-01', w: 81, t: 1 }, { d: '2026-09-02', w: 79, t: 9 }])
     expect(out).toEqual([{ d: '2026-09-01', w: 81, t: 1 }, { d: '2026-09-02', w: 79, t: 9 }])
+  })
+  it('measurements: one entry per day, the later edit wins a shared site, the other side keeps its own', () => {
+    const out = mergeMeasurements(
+      [{ d: '2026-09-02', t: 5, m: { waist: 82, arm: 35 } }],
+      [{ d: '2026-09-01', t: 1, m: { waist: 84 } }, { d: '2026-09-02', t: 9, m: { waist: 81, chest: 100 } }],
+    )
+    expect(out).toEqual([
+      { d: '2026-09-01', t: 1, m: { waist: 84 } },
+      { d: '2026-09-02', t: 9, m: { waist: 81, arm: 35, chest: 100 } },
+    ])
   })
 })
 
@@ -78,6 +88,12 @@ describe('mergeStates', () => {
     expect(m.exWeights).toEqual({ sq: { w: 110 }, bp: { w: 60 }, dl: { w: 140 } })
     expect(m.exNotes).toEqual({ sq: 'A note', dl: 'B note' })
     expect(m.barWeights).toEqual({ sq: 20, dl: 15 })
+  })
+
+  it('measurements union by day without losing a site either side logged', () => {
+    const a = base({ _ts: 2, measurements: [{ d: '2026-09-01', t: 5, m: { waist: 82, arm: 35 } }] })
+    const b = base({ _ts: 1, measurements: [{ d: '2026-09-01', t: 9, m: { waist: 81 } }] })
+    expect(mergeStates(a, b).measurements).toEqual([{ d: '2026-09-01', t: 9, m: { waist: 81, arm: 35 } }])
   })
 
   it('is commutative on the union fields and idempotent', () => {
@@ -136,9 +152,9 @@ describe('sign-in adoption helpers', () => {
   const server = { _ts: 100, unit: 'lb', restSec: 60, workouts: [{ id: 'w1', d: '2026-09-01' }], bodyweight: [{ d: '2026-09-01', w: 80, t: 1 }], routines: [{ id: 'r1', name: 'A' }], week: { 1: ['r1'] } }
   const local = { _ts: 900, unit: 'kg', restSec: 90, workouts: [{ id: 'w9', d: '2026-09-11' }], bodyweight: [{ d: '2026-09-11', w: 81, t: 2 }, { d: '2026-09-01', w: 79, t: 9 }], routines: [{ id: 'rg', name: 'Guest' }], customEx: [{ id: 'c1', name: 'x' }], week: { 2: ['rg'] } }
   it('localExtras counts what the device has that the server does not', () => {
-    expect(localExtras(local, server)).toEqual({ workouts: 1, bodyweight: 1, customEx: 1 })
-    expect(localExtras(server, server)).toEqual({ workouts: 0, bodyweight: 0, customEx: 0 })
-    expect(localExtras(null, server)).toEqual({ workouts: 0, bodyweight: 0, customEx: 0 })
+    expect(localExtras(local, server)).toEqual({ workouts: 1, bodyweight: 1, measurements: 0, customEx: 1 })
+    expect(localExtras(server, server)).toEqual({ workouts: 0, bodyweight: 0, measurements: 0, customEx: 0 })
+    expect(localExtras(null, server)).toEqual({ workouts: 0, bodyweight: 0, measurements: 0, customEx: 0 })
   })
   it('mergeStates with prefer keeps the preferred side\'s settings and plan although the other is newer', () => {
     const m = mergeStates(server, local, { prefer: 'a' })

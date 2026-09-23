@@ -60,6 +60,24 @@ export function mergeBodyweight(a = [], b = []) {
   return [...byDay.values()].sort((x, y) => (x.d < y.d ? -1 : 1))
 }
 
+/**
+ * One entry per day. Unlike a weigh-in, a day carries several sites and two devices can each log
+ * a different one, so a shared day keeps the union of its sites — the later-edited (`t`) copy wins
+ * a site both have, a site only one side logged is not dropped. Sorted by day.
+ */
+export function mergeMeasurements(a = [], b = []) {
+  const byDay = new Map()
+  for (const e of [...list(a), ...list(b)]) {
+    if (!e || e.d == null) continue
+    const cur = byDay.get(e.d)
+    if (!cur) { byDay.set(e.d, { ...e, m: { ...(e.m || {}) } }); continue }
+    const newer = (e.t || 0) > (cur.t || 0) ? e : cur
+    const older = newer === e ? cur : e
+    byDay.set(e.d, { ...newer, m: { ...(older.m || {}), ...(newer.m || {}) } })
+  }
+  return [...byDay.values()].sort((x, y) => (x.d < y.d ? -1 : 1))
+}
+
 function mergeExWeights(n = {}, o = {}) {
   const out = { ...(o || {}), ...(n || {}) }
   for (const k of Object.keys(o || {})) {
@@ -98,6 +116,7 @@ export function mergeStates(a, b, { prefer } = {}) {
     if (list(n[f]).length || list(o[f]).length) out[f] = unionById(n[f], o[f]).map(clone)
   }
   out.bodyweight = mergeBodyweight(n.bodyweight, o.bodyweight).map(clone)
+  if (list(n.measurements).length || list(o.measurements).length) out.measurements = mergeMeasurements(n.measurements, o.measurements).map(clone)
   if (list(n.favEx).length || list(o.favEx).length) out.favEx = [...new Set([...list(n.favEx), ...list(o.favEx)])]
   out.exWeights = clone(mergeExWeights(n.exWeights, o.exWeights))
   out.prefill = mergePrefill(n.prefill, o.prefill)
@@ -109,16 +128,19 @@ export function mergeStates(a, b, { prefer } = {}) {
   return out
 }
 
-// What `local` holds that `server` does not: the workouts and weigh-ins a device logged while it
-// was signed out, and the custom exercises they use. Sign-in asks about these before the server's
-// profile replaces the local copy; zero of each means there is nothing to ask about.
+// What `local` holds that `server` does not: the workouts, weigh-ins and body measurements a
+// device logged while it was signed out, and the custom exercises they use. Sign-in asks about
+// these before the server's profile replaces the local copy; zero of each means there is nothing
+// to ask about.
 export function localExtras(local, server) {
   const have = new Set(list(server?.workouts).map(workoutKey))
   const days = new Set(list(server?.bodyweight).map(e => e?.d))
+  const mDays = new Set(list(server?.measurements).map(e => e?.d))
   const ex = new Set(list(server?.customEx).map(e => e?.id))
   return {
     workouts: list(local?.workouts).filter(w => !have.has(workoutKey(w))).length,
     bodyweight: list(local?.bodyweight).filter(e => e && e.d != null && !days.has(e.d)).length,
+    measurements: list(local?.measurements).filter(e => e && e.d != null && !mDays.has(e.d)).length,
     customEx: list(local?.customEx).filter(e => e && !ex.has(e.id)).length
   }
 }

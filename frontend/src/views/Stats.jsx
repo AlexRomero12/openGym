@@ -5,7 +5,8 @@ import { EXIDX, matchExercise } from '../lib/exercises.js'
 import { lastBW, streakWeeks, setLabel, modeOf, effortOf, metricModeForEntry, metricRowsForEntry, bestWeightForEntry } from '../lib/history.js'
 import { fmtNum, fmtDate, fmtVol, todayISO, weekStartOf } from '../lib/format.js'
 import { t, exerciseNameFor, getLang } from '../lib/i18n.js'
-import { bwSheet, goalSheet, calendarSheet, workoutDetailSheet, WorkoutRow, bwDeltaColor } from '../sheets.jsx'
+import { bwSheet, goalSheet, calendarSheet, workoutDetailSheet, WorkoutRow, bwDeltaColor, measureSheet } from '../sheets.jsx'
+import { SITES, seriesFor, lastFor, deltaFor, sitesLogged, lengthUnit } from '../lib/measurements.js'
 import LineChart from '../components/LineChart.jsx'
 import Heatmap from '../components/Heatmap.jsx'
 import Icon from '../components/Icon.jsx'
@@ -292,6 +293,7 @@ export default function Stats() {
   const [exId, setExId] = useState(null)
   const [exMetric, setExMetric] = useState('top')
   const [muscle, setMuscle] = useState(null)   // músculo tocado en el mapa: filtra «Progreso por ejercicio»
+  const [mSite, setMSite] = useState(SITES[0].key)   // which body measurement the card charts
   const now = Date.now()
   const kind = displayScale(S)
   const hd = scaleName(kind)
@@ -300,6 +302,12 @@ export default function Stats() {
     .map(b => ({ t: b.t || new Date(b.d).getTime(), y: b.w, d: b.d }))
   const bw30 = S.bodyweight.filter(b => (b.t || new Date(b.d).getTime()) > now - 30 * 86400000)
   const bwDelta30 = bw30.length > 1 ? bw30[bw30.length - 1].w - bw30[0].w : null
+  // Body measurements: the card charts one site at a time (waist/chest/arm/thigh).
+  const mSites = sitesLogged(S)
+  const mPts = seriesFor(S, mSite).filter(p => range === 0 || p.t > now - range * 86400000)
+  const mLast = lastFor(S, mSite)
+  const mDelta = deltaFor(S, mSite)
+  const mUnit = lengthUnit(S.unit)
   const workouts = S.workouts
   const monthW = workouts.filter(w => String(w.d || '').slice(0, 7) === todayISO().slice(0, 7)).length
 
@@ -514,6 +522,27 @@ export default function Stats() {
           ? `No hay ejercicios registrados que involucren ${t(MUSCLE_NAME[muscle])} todavía.`
           : t('Finish your first workout to see progress curves here.')}</div>}
       </div>
+    </div>
+
+    <div className="card">
+      <div className="row between" style={{ marginBottom: 8 }}>
+        <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 7 }}><Icon name="ruler" />{t('Body measurements')}</h2>
+        <Button size="sm" icon="plus" onClick={() => measureSheet()}>{t('Log')}</Button>
+      </div>
+      {mSites.length ? <>
+        <Segmented className="seg-range" value={mSite} onChange={setMSite}
+          options={SITES.map(s => ({ value: s.key, label: t(s.label) }))} />
+        {mLast ? <>
+          <div className="row" style={{ gap: 8, alignItems: 'baseline', marginTop: 8 }}>
+            <div className="big">{fmtNum(mLast.y)} <span className="muted" style={{ fontSize: '1rem' }}>{mUnit}</span></div>
+            {!!mDelta && <span className="small row" style={{ gap: 2, fontWeight: 500, color: 'var(--label)' }}>
+              <Icon name={mDelta > 0 ? 'arrowUp' : 'arrowDown'} style={{ fontSize: 12 }} />{fmtNum(Math.abs(mDelta))}
+            </span>}
+            <span className="dim small" style={{ marginLeft: 'auto' }}>{fmtDate(mLast.d, true)}</span>
+          </div>
+          <div className="chart" style={{ marginTop: 8 }}><LineChart points={mPts} h={160} unit={mUnit} color="var(--blue)" /></div>
+        </> : <div className="muted small" style={{ marginTop: 10 }}>{t('No data yet')}</div>}
+      </> : <div className="muted small">{t('No measurements yet — log them here to start the curve.')}</div>}
     </div>
 
     {workouts.length > 0 && <>

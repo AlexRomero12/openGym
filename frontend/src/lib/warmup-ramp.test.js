@@ -74,3 +74,29 @@ describe('buildSets warm-up ramp by equipment', () => {
     expect(rows.map(r => r.w)).toEqual([16.1, 23, 36.8, 50, 50])
   })
 })
+
+// A machine whose lightest load is not zero — a hack-squat carriage that weighs 47 kg — has no
+// warm-up below it. The override in S.barWeights is that floor, and the ramp loads on its grid
+// (47, 52, 57…) rather than the zero-based one.
+describe('warm-up ramp off a per-exercise minimum', () => {
+  const S = { unit: 'kg', exWeights: {}, workouts: [], barWeights: { '0743': 47 } }
+
+  it('reads the minimum as the ramp floor, for a machine too', () => {
+    expect(warmupFloorBase(S, { id: '0743' })).toBe(47)
+  })
+
+  it('snaps the rungs to the minimum, not to zero', () => {
+    expect(warmupWeights(77, 3, 47, 5, true)).toEqual([47, 57, 67])
+  })
+
+  it('does not collapse the count when the floor is high', () => {
+    // A 30 kg RDL from a 20 kg bar: 25 is the only loadable rung between them, and N=2 finds it.
+    expect(warmupWeights(30, 2, 20, 5, true)).toEqual([20, 25])
+  })
+
+  it('builds the session rows from that floor', () => {
+    const rows = buildSets(S, { id: '0743', mode: 'reps', sets: 2, reps: 12, weight: 77, warmupSets: 3, inc: 5 }, { step: 5 })
+    expect(rows.map(r => r.w)).toEqual([47, 57, 67, 77, 77])
+    expect(rows.slice(0, 3).every(r => r.phase === 'warmup')).toBe(true)
+  })
+})
