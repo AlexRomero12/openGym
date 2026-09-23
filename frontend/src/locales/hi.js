@@ -895,7 +895,7 @@ export default {
   'reps': 'रेप्स',
   'Most reps in a set per workout': 'प्रति कसरत एक सेट में सबसे ज़्यादा रेप्स',
   'Warm-up sets': 'वार्म-अप सेट',
-  'Added before your work sets and left out of volume, records and progression. Each one closes half the gap to the work weight — you can still change any of them mid-session.': 'ये आपके वर्क सेट से पहले जुड़ते हैं और वॉल्यूम, रिकॉर्ड तथा प्रोग्रेशन में नहीं गिने जाते। हर सेट वर्क वज़न तक बची दूरी को आधा कर देता है — कसरत के दौरान आप इन्हें बदल सकते हैं।',
+  'Added before your work sets and left out of volume, records and progression. Starts on the bar (or a light first step) and climbs toward the work weight — you can still change any of them mid-session.': 'वर्क सेट से पहले जोड़े जाते हैं और वॉल्यूम, रिकॉर्ड और प्रोग्रेशन में नहीं गिने जाते। बार (या एक हल्के पहले स्टेप) से शुरू होकर वर्क वेट तक बढ़ते हैं — सेशन के दौरान इन्हें बदल सकते हो।',
   'Ramp-up sets added before the work sets, so you do not have to add them by hand each session.': 'वर्क सेट से पहले जुड़ने वाले तैयारी सेट, ताकि हर बार खुद जोड़ना न पड़े।',
   'Note': 'नोट',
   'This session': 'यह कसरत',

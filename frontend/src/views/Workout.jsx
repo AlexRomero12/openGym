@@ -5,7 +5,7 @@ import { workoutControls } from '../lib/workout-controls.js'
 import { useUI } from '../store/useUI.js'
 import { exOr } from '../lib/exercises.js'
 import { usesBar, barWeightFor, plateSplit } from '../lib/bar.js'
-import { effectiveRoutines, effectiveRoutineIds, lastEntryFor, bestWeightFor, bestWeightForEntry, buildSets, freestyleConfig, defaultConfig, setsDoneActive, setUnitsTotal, supersetUnits, unitOf, setLabel, modeOf, isBw, isPerSide, repStep, EFFORT, effortOf, stepEffort, capEffort, cascadeWeight, insertWarmupRow, removeRowAt, pairAdjacent, unpairSuperset, cleanupSg, applyIntensifierPlan, pinnedNoteFor, exNoteFor } from '../lib/history.js'
+import { effectiveRoutines, effectiveRoutineIds, lastEntryFor, bestWeightFor, bestWeightForEntry, buildSets, freestyleConfig, defaultConfig, setsDoneActive, setUnitsTotal, supersetUnits, unitOf, setLabel, modeOf, isBw, isPerSide, repStep, EFFORT, effortOf, stepEffort, capEffort, cascadeWeight, insertWarmupRow, removeRowAt, pairAdjacent, unpairSuperset, cleanupSg, applyIntensifierPlan, warmupFloorBase, pinnedNoteFor, exNoteFor } from '../lib/history.js'
 import { fmtNum, fmtDate, todayISO, exCount, DAYN } from '../lib/format.js'
 import { beep, vibrate, unlock } from '../lib/sound.js'
 import { t, exerciseNameFor } from '../lib/i18n.js'
@@ -613,7 +613,9 @@ function ActiveWorkout() {
   const removeSet = idx => mutEntry(idx, e => { if (e.sets.length > 1) e.sets.pop() })
   const addWarmup = idx => mutEntry(idx, e => {
     const m = modeOf({ ...(e.target || {}), id: e.id })
-    e.sets = insertWarmupRow(e.sets, m, e.target || {}, defaultIncrement(e.id, S.unit))
+    const cfg = { ...(e.target || {}), id: e.id }
+    const step = m === 'reps' ? weightIncrement(cfg, S.unit) : defaultIncrement(e.id, S.unit)
+    e.sets = insertWarmupRow(e.sets, m, e.target || {}, step, warmupFloorBase(S, cfg))
   })
   const removeSetAt = (idx, i) => mutEntry(idx, e => { e.sets = removeRowAt(e.sets, i) })
   const pairAt = (first, second) => update(s => {
@@ -750,13 +752,14 @@ function ActiveWorkout() {
         const full = { ...cfg, id: activeEntry.id }
         const activeRoutine = s.routines.find(r => r.id === activeEntry.rid)
         const step = modeOf(full) === 'reps' ? weightIncrement(full, s.unit) : defaultIncrement(activeEntry.id, s.unit)
+        const floorBase = warmupFloorBase(s, full)
         // A config without a set count keeps the rows the session already has.
         if (!(full.sets > 0)) full.sets = activeEntry.sets.filter(x => !isWarmupRow(x)).length || 1
         const plan = nextPrescription(s, full, activeRoutine)
         // The sheet edits sets, reps, weight and warm-ups as well as the rule — so the rows are
         // rebuilt from the new config the way the session was, and only what you already logged
         // is kept in place (done warm-ups first, then done work sets, then the fresh remainder).
-        const fresh = applyIntensifierPlan(applyPrescription(buildSets(s, full, { step, useTarget: plan.kind === 'off' }), plan, step), full)
+        const fresh = applyIntensifierPlan(applyPrescription(buildSets(s, full, { step, useTarget: plan.kind === 'off' }), plan, step, floorBase), full)
         const doneWarm = activeEntry.sets.filter(x => x.done && isWarmupRow(x))
         const doneWork = activeEntry.sets.filter(x => x.done && !isWarmupRow(x))
         const freshWarm = fresh.filter(isWarmupRow)
@@ -1033,12 +1036,13 @@ function ActiveWorkout() {
       const commit = cfg => update(s => {
         const full = { ...cfg, id: ex.id }
         const plan = freestyle ? null : nextPrescription(s, full, routine)
+        const step = modeOf(full) === 'reps' ? weightIncrement(full, s.unit) : defaultIncrement(ex.id, s.unit)
         const sets = buildSets(s, full, {
-          step: modeOf(full) === 'reps' ? weightIncrement(full, s.unit) : defaultIncrement(ex.id, s.unit),
+          step,
           ...(freestyle ? { preferLast: true } : {}),
           ...(plan?.kind === 'off' ? { useTarget: true } : {})
         })
-        const progressed = freestyle ? sets : applyPrescription(sets, plan, modeOf(full) === 'reps' ? weightIncrement(full, s.unit) : defaultIncrement(ex.id, s.unit))
+        const progressed = freestyle ? sets : applyPrescription(sets, plan, step, warmupFloorBase(s, full))
         const insertAt = insertionIndexAfterCurrentUnit(supersetUnits(s.active.entries), s.active.cur, s.active.entries.length)
         s.active.entries.splice(insertAt, 0, { id: ex.id, target: { ...cfg }, plan, sets: applyIntensifierPlan(progressed, full), ...(curRid ? { rid: curRid } : {}) })
         s.active.cur = insertAt

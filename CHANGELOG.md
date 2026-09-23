@@ -5,6 +5,18 @@
 Trabajo propio de este fork sobre v1.3.7. Nada de esto va al repo original salvo lo que se
 indica aparte (la traducción se propone en el **PR #245**).
 
+- 🔥 **Series de aproximación dinámicas y cargables (23/sep).** El número sigue siendo por ejercicio
+  (stepper «Warm-up sets», 0–5), pero los pesos ya no son un 50/75/87,5 fijo del trabajo: la rampa
+  **arranca en la barra vacía** (o en un primer paso ligero si el ejercicio no tiene barra) y cada
+  serie siguiente cierra la mitad del hueco hasta tu peso de trabajo, **redondeada hacia abajo al
+  escalón real de tu equipo**. Ese escalón ahora también es por equipo (`equipmentStep`,
+  `lib/progression.js`): barra **5 kg** (solo discos de 2,5), mancuernas **2/4 kg** sobre el total de
+  las dos (1/2 si es unilateral) y máquina/polea **2,3 kg**, con el override «Step» por ejercicio
+  mandando siempre. Afecta a **progresión y rampa** por igual, así que lo que prescribe el motor y lo
+  que calienta quedan en la misma grilla. Ej.: sentadilla 60 → 20 → 30 → 60; mancuernas 24 → 8 → 12
+  → 24. «Añadir serie de calentamiento» en sesión usa la misma escalera (sin duplicar un calentamiento
+  editado a mano). Tests: `lib/warmup-ramp.test.js` + `equipmentStep` en `progression.test.js`;
+  actualizados `history.test.js`, `warmup-invariants.test.js`, `session-start.test.js`.
 - 💬 **Entrenador: preguntas con foco y 1RM.** Dos tareas nuevas en el chat, además de plan,
   revisión y evaluación: **Preguntar por un ejercicio** (elige ejercicio y te da su 1RM estimado,
   la serie y fecha de la que sale, su gráfica y cómo van las últimas sesiones) y **Hacer una

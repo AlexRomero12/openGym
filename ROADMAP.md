@@ -123,7 +123,9 @@ QA sweep of every screen. Left over: routine reordering (#142), the Smith-bar "n
 
 - Load as %1RM or auto with a stored training max, target RPE/RIR (#153)
 - Wave / percentage progression, 5/3/1 style (#70; PR #168)
-- A warm-up generator that picks the ramp from load and lift (#156)
+- ~~A warm-up generator that picks the ramp from load and lift (#156)~~ — **done in this fork**
+  (`amigos-es`): the ramp starts on the empty bar (or the smallest loadable step) and snaps to each
+  exercise's real equipment grid, shared by progression and the warm-up block
 - Periodisation extras on top: mesocycle blocks, auto-regulation on RPE (#120)
 
 ## v1.3.14 — Cardio, alternatives, groups  (2026-12-20)

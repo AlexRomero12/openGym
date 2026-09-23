@@ -3,7 +3,7 @@
 // to identical entries, or the two paths drift apart the first time a prescription rule changes.
 // Imports both history.js and progression.js (which itself imports history.js); nothing in
 // either imports this file, so there is no cycle.
-import { buildSets, applyIntensifierPlan, modeOf, rerampWarmups } from './history.js'
+import { buildSets, applyIntensifierPlan, modeOf, rerampWarmups, warmupFloorBase } from './history.js'
 import { nextPrescription, applyPrescription, defaultIncrement, weightIncrement } from './progression.js'
 import { isWarmupRow, isSideSet, syncSideAggregate } from './workout-model.js'
 
@@ -42,10 +42,13 @@ export function buildSessionEntries(st, r, opts = {}) {
     // plates exist), not the unit default; a timed exercise's `inc` is seconds, so it keeps the
     // default for its optional load.
     const step = modeOf(cfg) === 'reps' ? weightIncrement(cfg, st.unit) : defaultIncrement(cfg.id, st.unit)
+    // The ramp floor (empty bar / bodyweight zero / derived) is fixed by the exercise, so it is
+    // resolved once here and threaded through both the build and the re-ramp after a Coach load.
+    const floorBase = warmupFloorBase(st, cfg)
     // The prescription is applied as the session is built, so you walk up to the bar with the
     // right weight already on the screen instead of being told about it afterwards. `plan` is
     // kept on the entry purely so the workout can explain the number it chose.
-    let sets = applyPrescription(buildSets(st, cfg, { step, useTarget: plan.kind === 'off' }), plan, step)
+    let sets = applyPrescription(buildSets(st, cfg, { step, useTarget: plan.kind === 'off' }), plan, step, floorBase)
     const target = { ...cfg }
     if (plan.weight != null) target.weight = plan.weight
     if (plan.reps != null) target.reps = plan.reps
@@ -53,7 +56,7 @@ export function buildSessionEntries(st, r, opts = {}) {
     if (plan.sets != null) target.sets = plan.sets
     const coached = pre && pre[cfg.id] ? Number(pre[cfg.id].w) : 0
     if (coached > 0 && modeOf(cfg) !== 'cardio') {
-      sets = rerampWarmups(applyCoachWeight(sets, coached), step)
+      sets = rerampWarmups(applyCoachWeight(sets, coached), step, floorBase)
       target.weight = coached
     }
     sets = applyIntensifierPlan(sets, cfg)

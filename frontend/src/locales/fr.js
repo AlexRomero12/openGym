@@ -895,7 +895,7 @@ export default {
   'reps': 'reps',
   'Most reps in a set per workout': 'Plus de reps dans une série par séance',
   'Warm-up sets': 'Séries d’échauffement',
-  'Added before your work sets and left out of volume, records and progression. Each one closes half the gap to the work weight — you can still change any of them mid-session.': 'Ajoutées avant tes séries de travail et exclues du volume, des records et de la progression. Chacune réduit de moitié l’écart avec la charge de travail — tu peux les modifier pendant la séance.',
+  'Added before your work sets and left out of volume, records and progression. Starts on the bar (or a light first step) and climbs toward the work weight — you can still change any of them mid-session.': 'Ajoutées avant tes séries de travail et exclues du volume, des records et de la progression. Commence à la barre (ou une première charge légère) et monte vers la charge de travail — tu peux les modifier pendant la séance.',
   'Ramp-up sets added before the work sets, so you do not have to add them by hand each session.': 'Séries de montée en charge avant les séries de travail, pour ne pas les ajouter à la main chaque fois.',
   'Note': 'Note',
   'This session': 'Cette séance',

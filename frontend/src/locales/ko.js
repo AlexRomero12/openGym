@@ -895,7 +895,7 @@ export default {
   'reps': '회',
   'Most reps in a set per workout': '운동당 한 세트 최다 횟수',
   'Warm-up sets': '워밍업 세트',
-  'Added before your work sets and left out of volume, records and progression. Each one closes half the gap to the work weight — you can still change any of them mid-session.': '작업 세트 앞에 추가되며 볼륨, 기록, 진행에는 포함되지 않습니다. 각 세트는 작업 중량까지의 차이를 절반으로 줄이며, 운동 중에 언제든 바꿀 수 있습니다.',
+  'Added before your work sets and left out of volume, records and progression. Starts on the bar (or a light first step) and climbs toward the work weight — you can still change any of them mid-session.': '워크 세트 전에 추가되며 볼륨, 기록, 프로그레션에 포함되지 않습니다. 바(또는 가벼운 첫 단계)에서 시작해 워크 무게까지 올라갑니다 — 세션 중 언제든 바꿀 수 있습니다.',
   'Ramp-up sets added before the work sets, so you do not have to add them by hand each session.': '작업 세트 앞에 넣는 준비 세트로, 매번 직접 추가하지 않아도 됩니다.',
   'Note': '메모',
   'This session': '이번 운동',

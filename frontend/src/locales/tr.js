@@ -895,7 +895,7 @@ export default {
   'reps': 'tekrar',
   'Most reps in a set per workout': 'Antrenman başına bir sette en çok tekrar',
   'Warm-up sets': 'Isınma setleri',
-  'Added before your work sets and left out of volume, records and progression. Each one closes half the gap to the work weight — you can still change any of them mid-session.': 'Çalışma setlerinden önce eklenir; hacim, rekor ve ilerlemeye sayılmaz. Her biri çalışma ağırlığına kalan farkı yarıya indirir — antrenman sırasında yine de değiştirebilirsin.',
+  'Added before your work sets and left out of volume, records and progression. Starts on the bar (or a light first step) and climbs toward the work weight — you can still change any of them mid-session.': 'Çalışma setlerinden önce eklenir; hacim, rekor ve ilerlemeye sayılmaz. Bardan (ya da hafif bir ilk adımdan) başlar ve çalışma ağırlığına doğru yükselir — antrenman sırasında yine de değiştirebilirsin.',
   'Ramp-up sets added before the work sets, so you do not have to add them by hand each session.': 'Çalışma setlerinden önce eklenen hazırlık setleri, böylece her antrenmanda elle eklemen gerekmez.',
   'Note': 'Not',
   'This session': 'Bu antrenman',

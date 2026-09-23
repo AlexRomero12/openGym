@@ -728,7 +728,7 @@ export default {
   'reps': 'ครั้ง',
   'Most reps in a set per workout': 'จำนวนครั้งมากที่สุดในหนึ่งเซ็ตต่อการออกกำลังกาย',
   'Warm-up sets': 'เซ็ตวอร์มอัพ',
-  'Added before your work sets and left out of volume, records and progression. Each one closes half the gap to the work weight — you can still change any of them mid-session.': 'เพิ่มไว้ก่อนเซ็ตหลัก และไม่นับรวมในปริมาณงาน สถิติ หรือการปรับน้ำหนัก แต่ละเซ็ตจะลดช่องว่างไปครึ่งหนึ่งของน้ำหนักเซ็ตหลัก — ยังปรับเปลี่ยนได้ระหว่างออกกำลังกาย',
+  'Added before your work sets and left out of volume, records and progression. Starts on the bar (or a light first step) and climbs toward the work weight — you can still change any of them mid-session.': 'เพิ่มก่อนเซ็ตทำงานและไม่นับในปริมาณ สถิติ และความก้าวหน้า เริ่มจากบาร์ (หรือขั้นแรกที่เบา) แล้วไต่ขึ้นสู่น้ำหนักทำงาน — ยังปรับได้ระหว่างเซสชัน',
   'Ramp-up sets added before the work sets, so you do not have to add them by hand each session.': 'เพิ่มเซ็ตไต่ระดับไว้ก่อนเซ็ตหลัก จะได้ไม่ต้องเพิ่มเองทุกครั้ง',
   'Note': 'บันทึก',
   'This session': 'รอบนี้',

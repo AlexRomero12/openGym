@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { nextTrainingDay, modeOf, isTimed, fmtSec, setLabel, defaultConfig, buildSets, freestyleConfig, exLine, workoutVolume, bestWeightFor, bestWeightForEntry, effortOf, stepEffort, capEffort, isBw, isPerSide, sideReps, repStep, cascadeWeight, insertWarmupRow, removeRowAt, workSetsDone, setsDone, setsDoneActive, setUnits, doneUnits, setUnitsTotal, pairAdjacent, unpairSuperset, supersetUnits, applyIntensifierPlan, pinnedNoteFor, exNoteFor, effectiveRoutineIds, effectiveRoutines, effectiveRoutineId, effectiveRoutine, lastEntryFor, entryExcluded } from './history.js'
+import { nextTrainingDay, modeOf, isTimed, fmtSec, setLabel, defaultConfig, buildSets, freestyleConfig, exLine, workoutVolume, bestWeightFor, bestWeightForEntry, effortOf, stepEffort, capEffort, isBw, isPerSide, sideReps, repStep, cascadeWeight, insertWarmupRow, warmupFloorBase, removeRowAt, workSetsDone, setsDone, setsDoneActive, setUnits, doneUnits, setUnitsTotal, pairAdjacent, unpairSuperset, supersetUnits, applyIntensifierPlan, pinnedNoteFor, exNoteFor, effectiveRoutineIds, effectiveRoutines, effectiveRoutineId, effectiveRoutine, lastEntryFor, entryExcluded } from './history.js'
 import { makeSideSet, setSideField, toggleSide } from './workout-model.js'
 import { EXDB } from './exercises.js'
 
@@ -381,7 +381,7 @@ describe('freestyleConfig', () => {
     const S = { exWeights: {}, workouts: [] }
     const cfg = { id: '0025', mode: 'reps', sets: 2, reps: 5, weight: 100, warmupSets: 3 }
     const rows = buildSets(S, cfg, { step: 2.5 })
-    expect(rows.map(r => r.w)).toEqual([50, 75, 87.5, 100, 100])
+    expect(rows.map(r => r.w)).toEqual([20, 50, 75, 100, 100])
     expect(rows.slice(0, 3).every(r => r.phase === 'warmup')).toBe(true)
     expect(rows.slice(3).every(r => r.phase === undefined)).toBe(true)
   })
@@ -831,17 +831,23 @@ describe('session row helpers', () => {
 
   // The first warm-up is the case that was broken: `at` is 0, so the old code read rows[-1],
   // fell through to `rows[rows.length - 1]` — the heaviest work set — and handed you a
-  // "warm-up" at your full working weight.
-  it('gives the first warm-up half the working weight, not the working weight itself', () => {
+  // "warm-up" at your full working weight. Without a bar it now starts at a third of the load.
+  it('gives the first warm-up a light load, not the working weight itself', () => {
     const next = insertWarmupRow([{ w: 100, r: 5, done: false }], 'reps', { reps: 5 }, 2.5)
     expect(next.length).toBe(2)
-    expect(next[0]).toMatchObject({ w: 50, r: 5, phase: 'warmup', warmup: true, done: false })
+    expect(next[0]).toMatchObject({ w: 32.5, r: 5, phase: 'warmup', warmup: true, done: false })
     expect(next[1].w).toBe(100)
   })
 
-  it('rounds the ramp to the exercise loading step', () => {
-    // 0 -> 95 halves to 47.5, which is not loadable in 5 kg steps: 45 is.
-    expect(insertWarmupRow([{ w: 95, r: 5 }], 'reps', { reps: 5 }, 5)[0].w).toBe(45)
+  it('rounds the ramp down to the exercise loading step', () => {
+    // A third of 95 is 31.7, which is not loadable in 5 kg steps: 30 is.
+    expect(insertWarmupRow([{ w: 95, r: 5 }], 'reps', { reps: 5 }, 5)[0].w).toBe(30)
+  })
+
+  it('starts a barbell warm-up on the empty bar', () => {
+    const S = { unit: 'kg', exWeights: {}, workouts: [] }
+    const next = insertWarmupRow([{ w: 100, r: 5, done: false }], 'reps', { reps: 5 }, 5, warmupFloorBase(S, { id: '0025' }))
+    expect(next[0].w).toBe(20)
   })
 
   it('keeps bodyweight warm-ups at zero and never exceeds the work set', () => {
@@ -853,7 +859,7 @@ describe('session row helpers', () => {
 
   it('ramps a timed hold the same way and leaves cardio on the work row values', () => {
     expect(insertWarmupRow([{ sec: 45, w: 40, done: false }], 'time', { sec: 45 }, 2.5)[0])
-      .toMatchObject({ sec: 45, w: 20, phase: 'warmup' })
+      .toMatchObject({ sec: 45, w: 12.5, phase: 'warmup' })
     expect(insertWarmupRow([{ min: 20, speed: 10, done: false }], 'cardio', { min: 20 }, 2.5)[0])
       .toMatchObject({ min: 20, speed: 10, phase: 'warmup' })
   })

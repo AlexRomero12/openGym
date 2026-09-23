@@ -89,7 +89,7 @@ describe('buildSessionEntries', () => {
       const work = coached[0].sets.filter(s => !isWarmupRow(s))
       expect(work.every(s => s.w === 55)).toBe(true)
       expect(coached[0].target.weight).toBe(55)
-      expect(coached[0].plan.weight).toBe(62.5, 'the engine’s own reading is untouched')
+      expect(coached[0].plan.weight).toBe(65, 'the engine’s own reading is untouched')
     })
 
     it('ramps the warm-ups toward the coached weight, not the engine’s', () => {

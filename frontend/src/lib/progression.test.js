@@ -1,13 +1,16 @@
 import { describe, it, expect } from 'vitest'
 import {
   readSession, sessionsFor, stallCount, nextPrescription, applyPrescription,
-  policyFor, defaultIncrement, weightIncrement, epley1RM, deloadTarget1RM,
+  policyFor, defaultIncrement, weightIncrement, equipmentStep, epley1RM, deloadTarget1RM,
   deloadFactorOf, DELOAD_FACTOR, POLICIES_FOR, DELOAD_AFTER, MAX_BW_SETS
 } from './progression.js'
 import { entryExcluded } from './history.js'
 import { EXDB } from './exercises.js'
 
-const LIFT = EXDB.find(e => e.bp !== 'cardio' && !['upper legs', 'lower legs', 'back', 'hips', 'glutes'].includes(e.bp) && !['body weight', 'band', 'resistance band'].includes(e.eq)).id
+// A generic externally-loaded lift on the plain body-part step (2.5 kg). Equipment with a
+// grid of its own — a bar, a dumbbell rack, a machine stack — is covered by equipmentStep's
+// own tests, so the policy tests below stay about the policy, not the load grid.
+const LIFT = EXDB.find(e => e.eq === 'weighted' && !['upper legs', 'lower legs', 'back', 'hips', 'glutes'].includes(e.bp)).id
 const HEAVY = EXDB.find(e => e.bp === 'upper legs').id
 const CARDIO = EXDB.find(e => e.bp === 'cardio').id
 
@@ -128,6 +131,34 @@ describe('weightIncrement', () => {
     expect(weightIncrement({ id: LIFT, inc: 1 }, 'kg')).toBe(1)
     expect(weightIncrement({ id: LIFT }, 'kg')).toBe(2.5)
     expect(weightIncrement({ id: HEAVY, inc: 0 }, 'kg')).toBe(5)
+  })
+})
+
+describe('equipmentStep', () => {
+  const step = (id, weight, extra = {}) => equipmentStep({ id, ...extra }, weight, 'kg')
+  it('jumps a barbell by the plates it takes — 5 kg, torso or legs alike', () => {
+    expect(step('0025', 60)).toBe(5)         // bench press, chest
+    expect(step('0023', 30)).toBe(5)         // barbell curl, upper arms
+  })
+  it('follows a dumbbell rack: 1 kg a hand to 10, then 2 — doubled for the two-hand total', () => {
+    expect(step('1274', 8)).toBe(2)          // a 4 kg hand: total 8 → 2 kg
+    expect(step('1274', 20)).toBe(2)         // right at the cutoff
+    expect(step('1274', 24)).toBe(4)         // past it
+  })
+  it('takes a single dumbbell (unilateral) at face value', () => {
+    expect(step('1274', 8, { side: true })).toBe(1)
+    expect(step('1274', 12, { side: true })).toBe(2)
+  })
+  it('moves a machine or cable stack by the plate it uses', () => {
+    expect(step('0009', 60)).toBe(2.3)       // leverage machine
+    expect(step('0007', 60)).toBe(2.3)       // cable
+  })
+  it('falls back to the body-part step for anything with no grid of its own', () => {
+    expect(step('0641', 60)).toBe(2.5)       // weighted, light body part
+  })
+  it('keeps the unit and bodyweight fallbacks', () => {
+    expect(equipmentStep({ id: '0025' }, 60, 'lb')).toBe(5)
+    expect(equipmentStep({ id: '0001', bodyweight: true }, 0, 'kg')).toBe(2.5)
   })
 })
 

@@ -42,7 +42,7 @@ describe('exercise configuration progression step', () => {
 
   it('keeps the draft empty while clearing the default so a sub-one comma decimal can be entered', () => {
     const { step } = renderConfig()
-    expect(step.value).toBe('2.5')
+    expect(step.value).toBe('2.3')
 
     act(() => { type(step, '') })
     expect(step.value).toBe('')

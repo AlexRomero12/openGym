@@ -18,6 +18,7 @@
 
 import { modeOf, repStep, rerampWarmups, isBw, isPerSide, entryExcluded } from './history.js'
 import { EXIDX } from './exercises.js'
+import { BAR_EQ } from './bar.js'
 import { isWarmupRow, isSideSet, syncSideAggregate, makeSideSet } from './workout-model.js'
 import { normalizeRepRange } from './rep-range.js'
 
@@ -78,18 +79,47 @@ export function deloadTarget1RM(weight, reps, factor = DELOAD_FACTOR, perSide = 
 // Body parts where a 5 kg jump is normal rather than brutal.
 const HEAVY_BP = ['upper legs', 'lower legs', 'back', 'hips', 'glutes']
 
-// Default load step. Lower-body lifts take the bigger jump — that is the "lift-specific
-// increment" a linear program lives on; an exercise can override it with cfg.inc.
+// Default load step, by body part. Lower-body lifts take the bigger jump — that is the
+// "lift-specific increment" a linear program lives on. This is now the *fallback* for
+// equipment the app cannot place on a real loading grid (see equipmentStep).
 export function defaultIncrement(exId, unit) {
   const ex = EXIDX[exId]
   const heavy = ex && HEAVY_BP.includes(ex.bp)
   if (unit === 'lb') return heavy ? 10 : 5
   return heavy ? 5 : 2.5
 }
+
+// Equipment whose stack moves by a fixed plate, not the body-part default.
+const MACHINE_EQ = /machine|cable|lever|sled/
+
+// The smallest loadable jump for an exercise, in the profile unit, at the weight being loaded.
+//
+// A dumbbell rack is not a barbell: it steps by 1 kg a hand up to 10 kg, then 2 kg — and the
+// app logs the *total* across both hands for a two-dumbbell movement, so those cutoffs double
+// (2 kg up to 20 kg, then 4 kg) unless the entry is unilateral and logs one dumbbell. A bar
+// takes the gym's plates: with 2.5 kg plates a side the smallest jump is 5 kg, whatever the
+// body part. A machine or cable stack moves by the plate the gym uses (2.3 kg here). Anything
+// else falls back to defaultIncrement, and an exercise's own cfg.inc overrides all of it.
+export function equipmentStep(cfg, weight, unit) {
+  const id = cfg && cfg.id
+  if (unit === 'lb' || isBw(cfg)) return defaultIncrement(id, unit)
+  const eq = EXIDX[id] && EXIDX[id].eq
+  const w = Number(weight) || 0
+  if (eq === 'dumbbell') {
+    const oneHand = isPerSide(cfg)
+    const cap = oneHand ? 10 : 20
+    const low = oneHand ? 1 : 2
+    return w <= cap ? low : low * 2
+  }
+  if (BAR_EQ.has(eq)) return 5
+  if (eq && MACHINE_EQ.test(eq)) return 2.3
+  return defaultIncrement(id, unit)
+}
+
 // Resolve the load step for reps-mode weight controls and progression. Timed exercises use
 // `inc` for seconds, so their optional weight column must not call this helper.
 export function weightIncrement(cfg, unit) {
-  return cfg && cfg.inc > 0 ? cfg.inc : defaultIncrement(cfg?.id, unit)
+  return cfg && cfg.inc > 0 ? cfg.inc : equipmentStep(cfg, cfg && cfg.weight, unit)
 }
 export const DEFAULT_SEC_INCREMENT = 5
 // Where adding another set of push-ups stops being progress and starts being a way to spend
@@ -445,7 +475,7 @@ export function nextPrescription(S, cfg, routine) {
  * Apply a prescription to freshly built sets. Only the fields the policy actually decided
  * are touched, and only on sets that have not been logged yet.
  */
-export function applyPrescription(sets, p, step = 2.5) {
+export function applyPrescription(sets, p, step = 2.5, floorBase = null) {
   if (!p || p.kind === 'off' || p.kind === 'first') return sets
   const out = sets.map(s => {
     // Never rewrite a logged set, and never rewrite a warm-up: the prescription speaks to
@@ -475,7 +505,7 @@ export function applyPrescription(sets, p, step = 2.5) {
   if (p.sets > workRows.length) {
     // An all-warm-up entry has no work row to seed growth from - growing warm-up copies
     // would both invent work and never terminate the loop. Leave the entry untouched.
-    if (!workRows.length) return rerampWarmups(out, step)
+    if (!workRows.length) return rerampWarmups(out, step, floorBase)
     const seed = workRows[workRows.length - 1]
     // A freshly appended row hasn't been performed, so it never inherits a seed's already-
     // logged drops/clusters — that would invent extra work the row never actually did. Its
@@ -490,5 +520,5 @@ export function applyPrescription(sets, p, step = 2.5) {
   }
   // Last, because the work rows now carry their final weight: the warm-up block ramps toward
   // what you are actually about to lift, not toward what you lifted last time.
-  return rerampWarmups(out, step)
+  return rerampWarmups(out, step, floorBase)
 }
