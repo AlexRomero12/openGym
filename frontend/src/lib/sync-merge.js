@@ -12,8 +12,9 @@
  *     of an id that both have; workouts sorted by day and start like every other writer
  *   - bodyweight: union by day, the later-edited (`t`) entry of a day that both have
  *   - favEx: ordered set union, the newer copy first
- *   - exWeights: union by exercise, the larger `w` (the app itself only ever raises it — a PR
- *     logged on the other device must not be forgotten); exNotes, barWeights: key union
+ *   - exWeights: union by exercise, the better `w` for that exercise — larger for an ordinary
+ *     lift, smaller on an assistance machine (a PR logged on the other device must not be
+ *     forgotten, whichever way it runs); exNotes, barWeights: key union
  *   - prefill: per date, the copy written later (`at`) wins whole — a date is written in one
  *     go, so there is nothing inside it to union
  *   - `_ts`: the later of the two; `_rev` dropped (the server sets it); `active` left to the caller
@@ -23,6 +24,8 @@
  * on resume and every push is conditional), and a resurrected entry beats a lost one. Tombstones
  * would close it.
  */
+import { beatsWeight } from './exercises.js'
+
 const clone = o => JSON.parse(JSON.stringify(o))
 const list = v => (Array.isArray(v) ? v : [])
 
@@ -81,7 +84,8 @@ export function mergeMeasurements(a = [], b = []) {
 function mergeExWeights(n = {}, o = {}) {
   const out = { ...(o || {}), ...(n || {}) }
   for (const k of Object.keys(o || {})) {
-    if (n && n[k] && o[k] && (o[k].w || 0) > (n[k].w || 0)) out[k] = o[k]
+    if (!(n && n[k] && o[k])) continue
+    if (beatsWeight(k, o[k].w || 0, n[k].w || 0)) out[k] = o[k]
   }
   return out
 }
